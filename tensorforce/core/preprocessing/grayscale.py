@@ -21,26 +21,23 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from tensorforce.core.preprocessing.preprocessor import Preprocessor
+import numpy as np
+
+from tensorforce.core.preprocessing import Preprocessor
 
 
 class Grayscale(Preprocessor):
+    """
+    Turn 3D color state into grayscale.
+    """
 
-    default_config = {
-        'weights': [0.299, 0.587, 0.114]
-    }
-
-    config_args = [
-        'weights'
-    ]
+    def __init__(self, weights=(0.299, 0.587, 0.114)):
+        super(Grayscale, self).__init__()
+        self.weights = weights
 
     def process(self, state):
-        """
-        Turn 3D color state into grayscale, thereby removing the last dimension.
-        :param state: state input
-        :return: new_state
-        """
-        return (self.config.weights * state).sum(-1)
+        state = (self.weights * state).sum(-1)
+        return np.reshape(state, tuple(state.shape) + (1,))
 
-    def shape(self, original_shape):
-        return list(original_shape[:-1])
+    def processed_shape(self, shape):
+        return tuple(shape[:-1]) + (1,)

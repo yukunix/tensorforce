@@ -31,7 +31,7 @@ import numpy as np
 import tensorflow as tf
 
 from tensorforce import util
-from tensorforce.core import PolicyGradientModel
+from tensorforce.models import PolicyGradientModel
 from tensorforce.core.optimizers import ConjugateGradientOptimizer
 
 
@@ -42,7 +42,7 @@ class TRPOModel(PolicyGradientModel):
 
     default_config = dict(
         optimizer=None,
-        learning_rate=None,
+        override_line_search=False,
         cg_damping=0.001,
         line_search_steps=20,
         max_kl_divergence=0.001,
@@ -53,6 +53,7 @@ class TRPOModel(PolicyGradientModel):
         config.default(TRPOModel.default_config)
         super(TRPOModel, self).__init__(config)
 
+        self.override_line_search = config.override_line_search
         self.cg_damping = config.cg_damping
         self.max_kl_divergence = config.max_kl_divergence
         self.line_search_steps = config.line_search_steps
@@ -86,7 +87,8 @@ class TRPOModel(PolicyGradientModel):
                 previous_log_prob = previous_distribution.log_probability(action=self.action[name])
                 prob_ratio = tf.minimum(tf.exp(log_prob - previous_log_prob), 1000)
 
-                surrogate_loss = -tf.reduce_mean(prob_ratio * self.reward)
+                self.loss_per_instance = tf.multiply(x=prob_ratio, y=self.reward)
+                surrogate_loss = -tf.reduce_mean(self.loss_per_instance, axis=0)
                 kl_divergence = distribution.kl_divergence(previous_distribution)
                 entropy = distribution.entropy()
                 losses.append((surrogate_loss, kl_divergence, entropy))
@@ -94,8 +96,10 @@ class TRPOModel(PolicyGradientModel):
             self.losses = [tf.reduce_mean(loss) for loss in zip(*losses)]
 
             # Get symbolic gradient expressions
-            variables = list(tf.trainable_variables())
+            variables = list(tf.trainable_variables())  # TODO: ideally not value function (see also for "gradients" below)
             gradients = tf.gradients(self.losses, variables)
+            variables = [var for var, grad in zip(variables, gradients) if grad is not None]
+            gradients = [grad for grad in gradients if grad is not None]
             self.policy_gradient = tf.concat(values=[tf.reshape(grad, (-1,)) for grad in gradients], axis=0)  # util.prod(util.shape(v))
 
             fixed_distribution = distribution.__class__([tf.stop_gradient(x) for x in distribution])
@@ -113,11 +117,15 @@ class TRPOModel(PolicyGradientModel):
             gradients = tf.gradients(fixed_kl_divergence, variables)
             gradient_vector_product = [tf.reduce_sum(g * t) for (g, t) in zip(gradients, tangents)]
 
-            self.flat_variable_helper = FlatVarHelper(self.session, variables)
+            self.flat_variable_helper = FlatVarHelper(variables)
             gradients = tf.gradients(gradient_vector_product, variables)
             self.fisher_vector_product = tf.concat(values=[tf.reshape(grad, (-1,)) for grad in gradients], axis=0)
 
             self.cg_optimizer = ConjugateGradientOptimizer(self.logger, config.cg_iterations)
+
+    def set_session(self, session):
+        super(TRPOModel, self).set_session(session)
+        self.flat_variable_helper.session = session
 
     def update(self, batch):
         """
@@ -127,6 +135,8 @@ class TRPOModel(PolicyGradientModel):
         :param batch:
         :return:
         """
+        super(TRPOModel, self).update(batch)
+
         self.feed_dict = {state: batch['states'][name] for name, state in self.state.items()}
         self.feed_dict.update({action: batch['actions'][name] for name, action in self.action.items()})
         self.feed_dict[self.reward] = batch['rewards']
@@ -136,7 +146,7 @@ class TRPOModel(PolicyGradientModel):
         gradient = self.session.run(self.policy_gradient, self.feed_dict)
 
         if np.allclose(gradient, np.zeros_like(gradient)):
-            self.logger.debug('Gradient zero, skipping update')
+            self.logger.debug('Gradient zero, skipping update.')
             return
 
         # The details of the approximations used here to solve the constrained
@@ -148,6 +158,10 @@ class TRPOModel(PolicyGradientModel):
         # Fisher matrix, which is a local approximation of the
         # KL divergence constraint
         shs = 0.5 * search_direction.dot(self.compute_fvp(search_direction))
+        if shs < 0:
+            self.logger.debug('Computing search direction failed, skipping update.')
+            return
+
         lagrange_multiplier = np.sqrt(shs / self.max_kl_divergence)
         update_step = search_direction / (lagrange_multiplier + util.epsilon)
         negative_gradient_direction = -gradient.dot(search_direction)
@@ -162,17 +176,20 @@ class TRPOModel(PolicyGradientModel):
         if improved:
             self.logger.debug('Updating with line search result..')
             self.flat_variable_helper.set(theta)
-        else:
+        elif self.override_line_search:
             self.logger.debug('Updating with full step..')
             self.flat_variable_helper.set(previous_theta + update_step)
+        else:
+            self.logger.debug('Failed to find line search solution, skipping update.')
 
         # Get loss values for progress monitoring
-        surrogate_loss, kl_divergence, entropy = self.session.run(self.losses, self.feed_dict)
+        surrogate_loss, kl_divergence, entropy, loss_per_instance = self.session.run(self.losses + [self.loss_per_instance], self.feed_dict)
 
         # Sanity checks. Is entropy decreasing? Is KL divergence within reason? Is loss non-zero?
         self.logger.debug('Surrogate loss = ' + str(surrogate_loss))
         self.logger.debug('KL-divergence after update = ' + str(kl_divergence))
         self.logger.debug('Entropy = ' + str(entropy))
+        return (surrogate_loss, kl_divergence, entropy), loss_per_instance
 
     def compute_fvp(self, p):
         self.feed_dict[self.tangent] = p
@@ -188,8 +205,8 @@ class TRPOModel(PolicyGradientModel):
 
 class FlatVarHelper(object):
 
-    def __init__(self, session, variables):
-        self.session = session
+    def __init__(self, variables):
+        self.session = None
         shapes = [util.shape(variable) for variable in variables]
         total_size = sum(util.prod(shape) for shape in shapes)
         self.theta = tf.placeholder(tf.float32, [total_size])

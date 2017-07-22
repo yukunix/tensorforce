@@ -31,29 +31,39 @@ from tensorforce import TensorForceError
 class Runner(object):
 
     # These agents can be used in an A3C fashion
-    async_supported = ['DQNAgent', 'VPGAgent', 'NAFAgent']
+    async_supported = ('VPGAgent', 'DQNAgent', 'NAFAgent')
 
-    def __init__(self, agent, environment, repeat_actions=1, preprocessor=None, cluster_spec=None, task_index=None, save_path=None, save_episodes=None):
+    def __init__(self, agent, environment, repeat_actions=1, cluster_spec=None, task_index=None, save_path=None, save_episodes=None):
+        """
+        Initialize a Runner object.
+
+        Args:
+            agent: `Agent` object containing the reinforcement learning agent
+            environment: `../../environments/Environment` object containing
+            repeat_actions:
+            cluster_spec:
+            task_index:
+            save_path:
+            save_episodes:
+        """
         if cluster_spec is not None and str(agent) not in Runner.async_supported:
             raise TensorForceError('Agent type not supported for distributed runner.')
         self.agent = agent
         self.environment = environment
         self.repeat_actions = repeat_actions
-        self.preprocessor = preprocessor
         self.cluster_spec = cluster_spec
         self.task_index = task_index
         self.save_path = save_path
         self.save_episodes = save_episodes
 
-    def run(self, episodes=-1, max_timesteps=-1, episode_finished=None, before_execution=None):
+    def run(self, episodes=-1, max_timesteps=-1, episode_finished=None):
         """
         Runs an environments for the specified number of episodes and time steps per episode.
-        
+
         Args:
             episodes: Number of episodes to execute
             max_timesteps: Max timesteps in a given episode
             episode_finished: Optional termination condition, e.g. a particular mean reward threshold
-            before_execution: Optional filter function to apply to action before execution
 
         Returns:
 
@@ -87,60 +97,39 @@ class Runner(object):
                 )
             )
 
-            variables_to_save = [v for v in tf.global_variables() if not v.name.startswith('local')]
-            init_op = tf.variables_initializer(variables_to_save)
-            local_init_op = tf.variables_initializer(tf.local_variables() + [v for v in tf.global_variables() if v.name.startswith('local')])
-            init_all_op = tf.global_variables_initializer()
-
-            def init_fn(sess):
-                sess.run(init_all_op)
-
             config = tf.ConfigProto(device_filters=['/job:ps', '/job:worker/task:{}/cpu:0'.format(self.task_index)])
 
+            init_op = tf.global_variables_initializer()
             supervisor = tf.train.Supervisor(
                 is_chief=(self.task_index == 0),
                 logdir='/tmp/train_logs',
-                global_step=self.agent.model.global_step,
-                init_op=init_op,
-                local_init_op=local_init_op,
-                init_fn=init_fn,
-                ready_op=tf.report_uninitialized_variables(variables_to_save),
+                global_step=self.agent.model.global_timestep,
+                init_op=tf.variables_initializer(self.agent.model.global_variables),
+                local_init_op=tf.variables_initializer(self.agent.model.variables),
+                init_fn=(lambda session: session.run(init_op)),
                 saver=self.agent.model.saver)
             # summary_op=tf.summary.merge_all(),
             # summary_writer=worker_agent.model.summary_writer)
 
-            # # Connecting to parameter server
-            # self.logger.debug('Connecting to session..')
-            # self.logger.info('Server target = ' + str(server.target))
-
-            # with supervisor.managed_session(server.target, config=config) as session, session.as_default():
-            # self.logger.info('Established session, starting runner..')
             managed_session = supervisor.managed_session(server.target, config=config)
             session = managed_session.__enter__()
-            self.agent.model.session = session
+            self.agent.model.set_session(session)
             # session.run(self.agent.model.update_local)
 
         # save episode reward and length for statistics
         self.episode_rewards = []
         self.episode_lengths = []
 
+        self.total_timesteps = 0
         self.episode = 1
         while True:
             state = self.environment.reset()
             self.agent.reset()
             episode_reward = 0
 
-            self.timestep = 1
+            self.timestep = 0
             while True:
-                if self.preprocessor:
-                    processed_state = self.preprocessor.process(state)
-                else:
-                    processed_state = state
-
-                action = self.agent.act(state=processed_state)
-
-                if before_execution:
-                    action = before_execution(self, action)
+                action = self.agent.act(state=state)
 
                 if self.repeat_actions > 1:
                     reward = 0
@@ -152,12 +141,14 @@ class Runner(object):
                 else:
                     state, reward, terminal = self.environment.execute(action=action)
 
+                self.agent.observe(reward=reward, terminal=terminal)
+
+                self.timestep += 1
+                self.total_timesteps += 1
                 episode_reward += reward
-                self.agent.observe(state=processed_state, action=action, reward=reward, terminal=terminal)
 
                 if terminal or self.timestep == max_timesteps:
                     break
-                self.timestep += 1
 
             self.episode_rewards.append(episode_reward)
             self.episode_lengths.append(self.timestep)

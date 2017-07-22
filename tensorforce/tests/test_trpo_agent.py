@@ -44,7 +44,10 @@ class TestTRPOAgent(unittest.TestCase):
                 max_kl_divergence=0.05,
                 states=environment.states,
                 actions=environment.actions,
-                network=layered_network_builder([dict(type='dense', size=32)])
+                network=layered_network_builder([
+                    dict(type='dense', size=32, activation='tanh'),
+                    dict(type='dense', size=32, activation='tanh')
+                ])
             )
             agent = TRPOAgent(config=config)
             runner = Runner(agent=agent, environment=environment)
@@ -52,14 +55,11 @@ class TestTRPOAgent(unittest.TestCase):
             def episode_finished(r):
                 return r.episode < 100 or not all(x >= 1.0 for x in r.episode_rewards[-100:])
 
-            runner.run(episodes=10000, episode_finished=episode_finished)
+            runner.run(episodes=2000, episode_finished=episode_finished)
             print('TRPO Agent (discrete): ' + str(runner.episode))
 
-            if runner.episode < 10000:
+            if runner.episode < 2000:
                 passed += 1
-                print('passed')
-            else:
-                print('failed')
 
         print('TRPO discrete agent passed = {}'.format(passed))
         self.assertTrue(passed >= 4)
@@ -77,7 +77,10 @@ class TestTRPOAgent(unittest.TestCase):
                 max_kl_divergence=0.05,
                 states=environment.states,
                 actions=environment.actions,
-                network=layered_network_builder([dict(type='dense', size=32)])
+                network=layered_network_builder([
+                    dict(type='dense', size=32, activation='tanh'),
+                    dict(type='dense', size=32, activation='tanh')
+                ])
             )
             agent = TRPOAgent(config=config)
             runner = Runner(agent=agent, environment=environment)
@@ -85,14 +88,11 @@ class TestTRPOAgent(unittest.TestCase):
             def episode_finished(r):
                 return r.episode < 100 or not all(x >= 1.0 for x in r.episode_rewards[-100:])
 
-            runner.run(episodes=10000, episode_finished=episode_finished)
+            runner.run(episodes=2000, episode_finished=episode_finished)
             print('TRPO Agent (continuous): ' + str(runner.episode))
 
-            if runner.episode < 10000:
+            if runner.episode < 2000:
                 passed += 1
-                print('passed')
-            else:
-                print('failed')
 
         print('TRPO continuous agent passed = {}'.format(passed))
         self.assertTrue(passed >= 4)

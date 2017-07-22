@@ -12,37 +12,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-
-"""
-Implements normalized advantage functions, largely following
-
-https://github.com/carpedm20/NAF-tensorflow/blob/master/src/network.py
-
-for the update logic with different modularisation.
-
-The core training update code is under MIT license, for more information see LICENSE-EXT.
-"""
-
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import tensorflow as tf
 from six.moves import xrange
-from tensorflow.contrib.framework import get_variables
 
-from tensorforce.core import Model
+import tensorflow as tf
+
+from tensorforce.models import Model
 from tensorforce.core.networks import NeuralNetwork, layers
 
 
 class NAFModel(Model):
 
+    allows_discrete_actions = False
+    allows_continuous_actions = True
+
     default_config = dict(
         update_target_weight=1.0,
         clip_gradients=0.0
     )
-    allows_discrete_actions = False
-    allows_continuous_actions = True
 
     def __init__(self, config):
         """
@@ -119,7 +109,7 @@ class NAFModel(Model):
             # State-value function
             value = layers['linear'](x=self.training_network.output, size=1)
             q_value = tf.squeeze(value + advantage, 1)
-            training_output_vars = get_variables('training_outputs')
+            training_output_vars = tf.contrib.framework.get_variables('training_outputs')
 
         with tf.variable_scope('target'):
             self.target_network = NeuralNetwork(config.network, inputs=self.state)
@@ -135,22 +125,20 @@ class NAFModel(Model):
                 # Naf directly outputs V(s)
                 target_value[action] = target_value_output
 
-            target_output_vars = get_variables('target_outputs')
+            target_output_vars = tf.contrib.framework.get_variables('target_outputs')
 
         with tf.name_scope("update"):
             for action in self.action:
-                q_target = self.reward[:-1] + (1.0 - tf.cast(self.terminal[:-1], tf.float32)) * config.discount\
-                                              * target_value[action][1:]
+                q_target = self.reward[:-1] + (1.0 - tf.cast(self.terminal[:-1], tf.float32)) * config.discount * target_value[action][1:]
                 delta = q_target - q_value[:-1]
+                self.loss_per_instance = tf.square(delta)
 
                 # We observe issues with numerical stability in some tests, gradient clipping can help
                 if config.clip_gradients > 0.0:
-                    huber_loss = tf.where(tf.abs(delta) < config.clip_gradients, tf.multiply(tf.square(delta), 0.5),
-                                          tf.abs(delta) - 0.5)
+                    huber_loss = tf.where(tf.abs(delta) < config.clip_gradients, 0.5 * self.loss_per_instance, tf.abs(delta) - 0.5)
                     loss = tf.reduce_mean(huber_loss)
                 else:
-                    loss = tf.reduce_mean(tf.square(delta))
-                # loss = tf.Print(loss, [loss])
+                    loss = tf.reduce_mean(self.loss_per_instance)
                 tf.losses.add_loss(loss)
 
         with tf.name_scope("update_target"):
@@ -163,7 +151,7 @@ class NAFModel(Model):
                 update = v_target.assign_sub(config.update_target_weight * (v_target - v_source))
                 self.target_network_update.append(update)
 
-    def update_target_network(self):
+    def update_target(self):
         """
         Updates target network.
 

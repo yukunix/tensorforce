@@ -23,53 +23,25 @@ from __future__ import print_function
 
 import tensorflow as tf
 
-from tensorforce.core.model import Model
+from tensorforce.models import Model
 from tensorforce.core.networks import NeuralNetwork, layers
 
 
 class DQFDModel(Model):
 
-    default_config = {
-        'update_target_weight': 1.0,
-        'clip_gradients': 0.0,
-        "supervised_weight": 1.0,
-        "expert_margin": 0.8
-    }
-
     allows_discrete_actions = True
     allows_continuous_actions = False
+
+    default_config = dict(
+        update_target_weight=1.0,
+        clip_gradients=0.0,
+        supervised_weight=1.0,
+        expert_margin=0.8
+    )
 
     def __init__(self, config):
         config.default(DQFDModel.default_config)
         super(DQFDModel, self).__init__(config)
-
-    def pre_train_update(self, batch=None):
-        """Computes the pre-training update.
-
-        Args:
-            batch: A batch of demo data.
-
-        Returns:
-
-        """
-
-        fetches = self.dqfd_opt
-
-        feed_dict = {state: batch['states'][name] for name, state in self.state.items()}
-        feed_dict.update({action: batch['actions'][name] for name, action in self.action.items()})
-
-        feed_dict[self.reward] = batch['rewards']
-        feed_dict[self.terminal] = batch['terminals']
-        feed_dict.update({internal: batch['internals'][n] for n, internal in enumerate(self.internal_inputs)})
-
-        self.session.run(fetches=fetches, feed_dict=feed_dict)
-
-    def update_target_network(self):
-        """
-        Updates target network.
-
-        """
-        self.session.run(self.target_network_update)
 
     def create_tf_operations(self, config):
         """Create training graph. For DQFD, we build the double-dqn training graph and
@@ -130,13 +102,14 @@ class DQFDModel(Model):
                 # Surrogate loss as the mean squared error between actual observed rewards and expected rewards
                 q_target = self.reward[:-1] + (1.0 - tf.cast(self.terminal[:-1], tf.float32)) * self.discount * target_value[action][1:]
                 delta = q_target - q_value
+                self.loss_per_instance = tf.square(delta)
 
                 # If gradient clipping is used, calculate the huber loss
                 if config.clip_gradients > 0.0:
-                    huber_loss = tf.where(tf.abs(delta) < config.clip_gradients, 0.5 * tf.square(delta), tf.abs(delta) - 0.5)
+                    huber_loss = tf.where(tf.abs(delta) < config.clip_gradients, 0.5 * self.loss_per_instance, tf.abs(delta) - 0.5)
                     double_q_loss = tf.reduce_mean(huber_loss)
                 else:
-                    double_q_loss = tf.reduce_mean(tf.square(delta))
+                    double_q_loss = tf.reduce_mean(self.loss_per_instance)
 
                 # Use the existing loss structure from the model here, then compute dqfd loss separately
                 tf.losses.add_loss(double_q_loss)
@@ -171,3 +144,30 @@ class DQFDModel(Model):
                 update = v_target.assign_sub(config.update_target_weight * (v_target - v_source))
                 self.target_network_update.append(update)
 
+    def update_target(self):
+        """
+        Updates target network.
+
+        """
+        self.session.run(self.target_network_update)
+
+    def demonstration_update(self, batch=None):
+        """Computes the demonstration update.
+
+        Args:
+            batch: A batch of demo data.
+
+        Returns:
+
+        """
+
+        fetches = self.dqfd_opt
+
+        feed_dict = {state: batch['states'][name] for name, state in self.state.items()}
+        feed_dict.update({action: batch['actions'][name] for name, action in self.action.items()})
+
+        feed_dict[self.reward] = batch['rewards']
+        feed_dict[self.terminal] = batch['terminals']
+        feed_dict.update({internal: batch['internals'][n] for n, internal in enumerate(self.internal_inputs)})
+
+        self.session.run(fetches=fetches, feed_dict=feed_dict)

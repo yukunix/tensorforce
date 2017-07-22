@@ -28,21 +28,39 @@ class Configuration(object):
     """Configuration class that extends dict and reads configuration files (currently only json)
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, allow_defaults=True, **kwargs):
         self._config = dict(**kwargs)
+        self.allow_defaults = allow_defaults
 
     @staticmethod
-    def from_json(filename):
-        path = os.path.join(os.getcwd(), filename)
+    def from_json(filename, absolute_path=False, allow_defaults=True):
+        if absolute_path:
+            path = filename
+        else:
+            path = os.path.join(os.getcwd(), filename)
+
         with open(path, 'r') as fp:
-            config = json.load(fp=fp)
-        return Configuration(**config)
+            json_string = fp.read()
+        return Configuration.from_json_string(json_string=json_string, allow_defaults=True)
+
+    @staticmethod
+    def from_json_string(json_string, allow_defaults=True):
+        config = json.loads(json_string)
+        if 'allow_defaults' in config and config['allow_defaults'] != allow_defaults:
+            raise TensorForceError('allow_defaults conflict between JSON ({}) and method call ({})'.format(
+                config['allow_defaults'],
+                allow_defaults
+            ))
+        return Configuration(allow_defaults=allow_defaults, **config)
 
     def __str__(self):
         return '{' + ', '.join('{}={}'.format(key, value) for key, value in self._config.items()) + '}'
 
     def __iter__(self):
         return iter(self._config.items())
+
+    def __len__(self):
+        return len(self._config)
 
     def items(self):
         return self._config.items()
@@ -55,23 +73,22 @@ class Configuration(object):
             raise TensorForceError('Value for `{}` is not defined.'.format(name))
         return self._config[name]
 
+    def __getitem__(self, name):
+        return self.__getattr__(name)
+
     def __setattr__(self, name, value):
-        if name == '_config':
-            value = {k: Configuration(**v) if isinstance(v, dict) else v for k, v in value.items()}
+        if name == 'allow_defaults':
             super(Configuration, self).__setattr__(name, value)
-            return
-        if name not in self._config:
-            raise TensorForceError('Value is not defined.')
-        elif isinstance(value, dict):
-            self._config[name] = Configuration(**value)
+        elif name == '_config':
+            value = {k: make_config_value(v) for k, v in value.items()}
+            super(Configuration, self).__setattr__(name, value)
+        elif name not in self._config:
+            raise TensorForceError('Value {} is not defined.'.format(name))
         else:
-            self._config[name] = value
+            self._config[name] = make_config_value(value)
 
     def keys(self):
         return self._config.keys()
-
-    def __getitem__(self, name):
-        return self._config[name]
 
     def copy(self):
         return Configuration(**self._config)
@@ -79,6 +96,17 @@ class Configuration(object):
     def default(self, default):
         for key, value in default.items():
             if key not in self._config:
+                if not self.allow_defaults:
+                    raise TensorForceError('This Configuration does not allow defaults. Attempt to default {}'.format(key))
                 if isinstance(value, dict):
                     value = Configuration(**value)
                 self._config[key] = value
+
+
+def make_config_value(value):
+    if isinstance(value, dict):
+        return Configuration(**value)
+    elif isinstance(value, list):
+        return [make_config_value(v) for v in value]
+    else:
+        return value

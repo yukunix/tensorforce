@@ -30,6 +30,10 @@ def prod(xs):
     return p
 
 
+def rank(x):
+    return x.get_shape().ndims
+
+
 def shape(x, unknown=-1):
     return tuple(unknown if dims is None else dims for dims in x.get_shape().as_list())
 
@@ -54,16 +58,24 @@ def np_dtype(dtype):
     elif dtype == 'bool' or dtype == bool:
         return np.bool_
     else:
-        raise TensorForceError()
+        raise TensorForceError("Error: Type conversion from type {} not supported.".format(str(dtype)))
 
 
 def tf_dtype(dtype):
-    if dtype == 'float' or dtype == float:
+    """
+    Translates datatype specifications in environments into tensorflow dtypes.
+    Args:
+        dtype: 
+
+    Returns:
+
+    """
+    if dtype == 'float' or dtype == float or dtype == np.float32:
         return tf.float32
-    elif dtype == 'int' or dtype == int:
+    elif dtype == 'int' or dtype == int or dtype == np.int32:
         return tf.int32
     else:
-        raise TensorForceError()
+        raise TensorForceError("Error: Type conversion from type {} not supported.".format(str(dtype)))
 
 
 def function(f, predefined=None):

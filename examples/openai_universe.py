@@ -95,13 +95,8 @@ def main():
         print(config)
 
     logger = logging.getLogger(__name__)
-    logger.setLevel(log_levels[config['loglevel']])
+    logger.setLevel(log_levels[config.loglevel])
 
-    # preprocessing_config = config['preprocessing']
-    # if preprocessing_config:
-    #     stack = build_preprocessing_stack(preprocessing_config)
-    #     config.states['shape'] = stack.shape(config.states['shape'])
-    # else:
     stack = None
 
     agent = create_agent(args.agent, config, network_config)
@@ -142,7 +137,7 @@ def main():
 
     logger.info("Starting {agent} for Environment '{env}'".format(agent=agent, env=env))
     runner.run(args.episodes, args.max_timesteps, episode_finished=episode_finished)
-    logger.info("Learning finished. Total episodes: {ep}".format(ep=runner.episode + 1))
+    logger.info("Learning finished. Total episodes: {ep}".format(ep=runner.episode))
 
     if args.monitor:
         env.gym.monitor.close()

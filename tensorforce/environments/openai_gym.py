@@ -25,8 +25,6 @@ import gym
 from gym.wrappers import Monitor
 from gym.spaces.discrete import Discrete
 
-import numpy as np
-
 from tensorforce import TensorForceError
 from tensorforce.environments import Environment
 
@@ -35,13 +33,15 @@ class OpenAIGym(Environment):
 
     def __init__(self, gym_id, monitor=None, monitor_safe=False, monitor_video=0):
         """
-        Initialize OpenAI gym environment.
+        Initialize OpenAI Gym.
 
-        :param gym_id: OpenAI Gym environment ID. See https://gym.openai.com/envs
-        :param monitor: Output directory. Setting this to None disables monitoring.
-        :param monitor_safe: Setting this to True prevents existing log files to be overwritten. Default False.
-        :param monitor_video: Save a video every monitor_video steps. Setting this to 0 disables recording of videos.
+        Args:
+            gym_id: OpenAI Gym environment ID. See https://gym.openai.com/envs
+            monitor: Output directory. Setting this to None disables monitoring.
+            monitor_safe: Setting this to True prevents existing log files to be overwritten. Default False.
+            monitor_video: Save a video every monitor_video steps. Setting this to 0 disables recording of videos.
         """
+
         self.gym_id = gym_id
         self.gym = gym.make(gym_id)  # Might raise gym.error.UnregisteredEnv or gym.error.DeprecatedEnv
 
@@ -49,30 +49,21 @@ class OpenAIGym(Environment):
             if monitor_video == 0:
                 video_callable = False
             else:
-                video_callable = lambda x: x % monitor_video == 0
+                video_callable = (lambda x: x % monitor_video == 0)
             self.gym = Monitor(self.gym, monitor, force=not monitor_safe, video_callable=video_callable)
 
     def __str__(self):
         return 'OpenAIGym({})'.format(self.gym_id)
 
     def close(self):
-        """
-        Close environment. No other method calls possible afterwards.
-        """
         self.gym = None
 
     def reset(self):
-        """
-        Pass reset function to gym.
-        """
         return self.gym.reset()
 
     def execute(self, action):
-        """
-        Pass action to gym, return reward, next step, terminal state and additional info.
-        """
         if isinstance(self.gym.action_space, gym.spaces.Box):
-            action = [action] # some gym environments expect a list (f.i. Pendulum-v0)
+            action = [action]  # some gym environments expect a list (f.i. Pendulum-v0)
         state, reward, terminal, _ = self.gym.step(action)
         return state, reward, terminal
 

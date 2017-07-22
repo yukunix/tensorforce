@@ -25,16 +25,62 @@ import numpy as np
 import tensorflow as tf
 
 from tensorforce import TensorForceError, util
-from tensorforce.core import Model
+from tensorforce.models import Model
 from tensorforce.core.networks import NeuralNetwork
 from tensorforce.core.value_functions import value_functions
-from tensorforce.core.distributions import distributions
+from tensorforce.core.distributions import distributions, Distribution, Gaussian, Categorical
+
+
+def _get_distribution(action):
+    """Return the distribution associated with the action.
+
+    The distribution in `action.distribution` can be either provided as a string
+    or as an instance of Distribution. Defaults to `Gaussian` and `Categorical`.
+
+    Args:
+        action: dict
+
+    Returns:
+        distribution: instance of `Distribution`
+
+    """
+    if 'distribution' not in action:
+        if action.continuous:
+            return Gaussian()
+        else:
+            return Categorical(num_actions=action.num_actions)
+
+    distribution = action.distribution
+
+    if isinstance(distribution, Distribution):
+        return distribution
+
+    if distribution not in distributions:
+        raise TensorForceError('Unknown distribution: {}'.format(distribution))
+
+    distribution = distributions[distribution]
+    if action.continuous:
+        return distribution()
+    else:
+        return distribution(num_actions=action.num_actions)
 
 
 class PolicyGradientModel(Model):
+    """
+    Policy Gradient Model base class.
 
+
+    A Policy Gradient Model expects the following additional configuration parameters:
+
+    * `baseline`: string indicating the baseline value function (currently 'linear' or 'mlp').
+    * `baseline_args`: list of arguments for the baseline value function.
+    * `baseline_kwargs`: dict of keyword arguments for the baseline value function.
+    * `generalized_advantage_estimation`: boolean indicating whether to use GAE estimation.
+    * `gae_lambda`: float of the Generalized Advantage Estimation lambda.
+    * `normalize_advantage`: boolean indicating whether to normalize the advantage or not.
+
+    """
     default_config = dict(
-        sample_actions=True,
         baseline=None,
         baseline_args=None,
         baseline_kwargs=None,
@@ -49,27 +95,16 @@ class PolicyGradientModel(Model):
         # distribution
         self.distribution = dict()
         for name, action in config.actions:
-            if 'distribution' in action:
-                distribution = action.distribution
-            else:
-                distribution = 'gaussian' if action.continuous else 'categorical'
-            if distribution not in distributions:
-                raise TensorForceError()
-            if action.continuous:
-                self.distribution[name] = distributions[distribution]()
-            else:
-                self.distribution[name] = distributions[distribution](num_actions=action['num_actions'])
+            self.distribution[name] = _get_distribution(action)
 
         # baseline
-        baseline = config.baseline
-        args = config.baseline_args or ()
-        kwargs = config.baseline_kwargs or {}
         if config.baseline is None:
             self.baseline = None
-        elif config.baseline in value_functions:
-            self.baseline = value_functions[baseline](self.session, *args, **kwargs)
         else:
-            raise Exception()
+            baseline = util.function(f=config.baseline, predefined=value_functions)
+            args = config.baseline_args or ()
+            kwargs = config.baseline_kwargs or {}
+            self.baseline = baseline(*args, **kwargs)
 
         super(PolicyGradientModel, self).__init__(config)
 
@@ -90,12 +125,17 @@ class PolicyGradientModel(Model):
 
         with tf.variable_scope('distribution'):
             for action, distribution in self.distribution.items():
-                distribution.create_tf_operations(x=self.network.output, sample=config.sample_actions)
+                distribution.create_tf_operations(x=self.network.output, deterministic=self.deterministic, **config.actions[action])
                 self.action_taken[action] = distribution.value
 
         if self.baseline:
             with tf.variable_scope('baseline'):
                 self.baseline.create_tf_operations(config)
+
+    def set_session(self, session):
+        super(PolicyGradientModel, self).set_session(session)
+        if self.baseline is not None:
+            self.baseline.session = session
 
     def update(self, batch):
         """Generic policy gradient update on a batch of experiences. Each model needs to update its specific
@@ -107,7 +147,8 @@ class PolicyGradientModel(Model):
         Returns:
 
         """
-        batch['returns'] = util.cumulative_discount(rewards=batch['rewards'], terminals=batch['terminals'], discount=self.discount)
+        batch['returns'] = util.cumulative_discount(rewards=batch['rewards'], terminals=batch['terminals'],
+                                                    discount=self.discount)
         # assert utils.discount(batch['rewards'], batch['terminals'], self.discount) == discount
         batch['rewards'] = self.advantage_estimation(batch)
         if self.baseline:
@@ -128,16 +169,14 @@ class PolicyGradientModel(Model):
 
         estimates = self.baseline.predict(states=batch['states'])
         if self.generalized_advantage_estimation:
-            deltas = np.array(self.discount * estimates[n + 1] - estimates[n] if n < len(estimates) - 1 or terminal else 0.0 for n, terminal in enumerate(batch['terminals']))
+            deltas = np.array(
+                [self.discount * estimates[n + 1] - estimates[n] if (n < len(estimates) - 1 and not terminal) else 0.0
+                 for n, terminal in enumerate(batch['terminals'])])
             deltas += batch['rewards']
-            # if terminals[-1]:
-            #     adjusted_estimate = np.append(estimate, [0])
-            # else:
-            #     adjusted_estimate = np.append(estimate, estimate[-1])
-            # deltas = batch['rewards'] + self.discount * adjusted_estimate[1:] - adjusted_estimate[:-1]
-            advantage = util.cumulative_discount(rewards=deltas, terminals=batch['terminals'], discount=(self.discount * self.gae_lambda))
+            advantage = util.cumulative_discount(rewards=deltas, terminals=batch['terminals'],
+                                                 discount=(self.discount * self.gae_lambda))
         else:
-            advantage = batch['returns'] - estimates
+            advantage = np.array(batch['returns']) - estimates
 
         if self.normalize_advantage:
             advantage -= advantage.mean()

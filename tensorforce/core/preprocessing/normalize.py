@@ -14,7 +14,7 @@
 # ==============================================================================
 
 """
-Normalize data by rescaling.
+Standardize data (z-transformation)
 """
 
 from __future__ import absolute_import
@@ -23,25 +23,15 @@ from __future__ import print_function
 
 import numpy as np
 
-from tensorforce.core.preprocessing.preprocessor import Preprocessor
+from tensorforce import util
+from tensorforce.core.preprocessing import Preprocessor
 
 
 class Normalize(Preprocessor):
-
-    default_config = {
-    }
-
-    config_args = [
-    ]
+    """
+    Normalize state. Subtract mean and divide by standard deviation.
+    """
 
     def process(self, state):
-        """
-        Standardize the data.
-        :param state: state input
-        :return: new_state
-        """
-        data = state.astype(np.float32)
-        data -= data.min()
-        data /= (data.max() - data.min())
-
-        return data
+        state = state.astype(np.float32)
+        return (state - state.mean()) / (state.std() + util.epsilon)

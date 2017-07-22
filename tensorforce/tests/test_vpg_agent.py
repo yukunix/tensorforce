@@ -39,7 +39,10 @@ class TestVPGAgent(unittest.TestCase):
                 learning_rate=0.001,
                 states=environment.states,
                 actions=environment.actions,
-                network=layered_network_builder([dict(type='dense', size=32)])
+                network=layered_network_builder([
+                    dict(type='dense', size=32, activation='tanh'),
+                    dict(type='dense', size=32, activation='tanh')
+                ])
             )
             agent = VPGAgent(config=config)
             runner = Runner(agent=agent, environment=environment)
@@ -47,14 +50,11 @@ class TestVPGAgent(unittest.TestCase):
             def episode_finished(r):
                 return r.episode < 100 or not all(x >= 1.0 for x in r.episode_rewards[-100:])
 
-            runner.run(episodes=10000, episode_finished=episode_finished)
+            runner.run(episodes=2000, episode_finished=episode_finished)
             print('VPG Agent (discrete): ' + str(runner.episode))
 
-            if runner.episode < 10000:
+            if runner.episode < 2000:
                 passed += 1
-                print('passed')
-            else:
-                print('failed')
 
         print('VPG discrete agent passed = {}'.format(passed))
         self.assertTrue(passed >= 4)
@@ -69,7 +69,10 @@ class TestVPGAgent(unittest.TestCase):
                 learning_rate=0.001,
                 states=environment.states,
                 actions=environment.actions,
-                network=layered_network_builder([dict(type='dense', size=32)])
+                network=layered_network_builder([
+                    dict(type='dense', size=32, activation='tanh'),
+                    dict(type='dense', size=32, activation='tanh')
+                ])
             )
             agent = VPGAgent(config=config)
             runner = Runner(agent=agent, environment=environment)
@@ -81,9 +84,6 @@ class TestVPGAgent(unittest.TestCase):
             print('VPG Agent (continuous): ' + str(runner.episode))
             if runner.episode < 5000:
                 passed += 1
-                print('passed')
-            else:
-                print('failed')
 
         print('VPG continuous agent passed = {}'.format(passed))
         self.assertTrue(passed >= 4)

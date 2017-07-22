@@ -17,7 +17,36 @@ from __future__ import absolute_import
 from __future__ import print_function
 from __future__ import division
 
+import os
+
 from setuptools import setup
+
+install_requires=[
+    'numpy',
+    'six',
+    'scipy',
+    'pillow',
+    'pytest'
+]
+
+setup_requires=[
+    'numpy',
+    'recommonmark'
+]
+
+extras_require = {
+    'tf': ['tensorflow>=1.2.0'],
+    'tf_gpu': ['tensorflow-gpu>=1.2.0'],
+    'gym': ['gym>=0.7.4'],
+    'universe': ['universe>=0.21.3']
+}
+
+# Readthedocs requires Sphinx extensions to be specified as part of
+# install_requires in order to build properly.
+on_rtd = os.environ.get('READTHEDOCS', None) == 'True'
+if on_rtd:
+    install_requires.extend(setup_requires)
+
 
 setup(name='tensorforce',
       version='0.2',
@@ -27,12 +56,7 @@ setup(name='tensorforce',
       author_email='contact@reinforce.io',
       license='Apache 2.0',
       packages=['tensorforce'],
-      install_requires=[
-          'tensorflow',
-          'numpy',
-          'six',
-          'scipy',
-          'pillow',
-          'pytest'
-      ],
+      install_requires=install_requires,
+      setup_requires=setup_requires,
+      extras_require=extras_require,
       zip_safe=False)

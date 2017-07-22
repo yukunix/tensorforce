@@ -32,10 +32,9 @@ import tensorflow as tf
 from tensorforce import Configuration, TensorForceError
 from tensorforce.core.networks import from_json
 from tensorforce.agents import agents
+from tensorforce.models.model import log_levels
 from tensorforce.environments.openai_gym import OpenAIGym
 from tensorforce.execution import Runner
-from tensorforce.core.model import log_levels
-from tensorforce.core.preprocessing import build_preprocessing_stack
 
 
 def main():
@@ -147,13 +146,6 @@ def main():
     logger = logging.getLogger(__name__)
     logger.setLevel(log_levels[agent_config.loglevel])
 
-    preprocessing_config = agent_config.preprocessing
-    if preprocessing_config:
-        preprocessor = build_preprocessing_stack(preprocessing_config)
-        agent_config.states['shape'] = preprocessor.shape(agent_config.states['shape'])
-    else:
-        preprocessor = None
-
     agent = agents[args.agent](config=agent_config)
 
     logger.info("Starting distributed agent for OpenAI Gym '{gym_id}'".format(gym_id=args.gym_id))
@@ -164,7 +156,6 @@ def main():
         agent=agent,
         environment=environment,
         repeat_actions=1,
-        preprocessor=preprocessor,
         cluster_spec=cluster_spec,
         task_index=args.task_index
     )

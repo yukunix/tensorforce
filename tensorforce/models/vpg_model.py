@@ -22,13 +22,14 @@ from __future__ import division
 
 import tensorflow as tf
 
-from tensorforce.core import PolicyGradientModel
+from tensorforce.models import PolicyGradientModel
 
 
 class VPGModel(PolicyGradientModel):
 
     allows_discrete_actions = True
     allows_continuous_actions = True
+
     default_config = dict()
 
     def __init__(self, config):
@@ -41,5 +42,6 @@ class VPGModel(PolicyGradientModel):
         with tf.variable_scope('update'):
             for name, action in self.action.items():
                 log_prob = self.distribution[name].log_probability(action=action)
-                loss = -tf.reduce_mean(input_tensor=tf.multiply(x=log_prob, y=self.reward), axis=0)
+                self.loss_per_instance = tf.multiply(x=log_prob, y=self.reward)
+                loss = -tf.reduce_mean(input_tensor=self.loss_per_instance, axis=0)
                 tf.losses.add_loss(loss)

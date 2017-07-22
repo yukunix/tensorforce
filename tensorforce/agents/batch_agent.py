@@ -21,12 +21,29 @@ from __future__ import absolute_import
 from __future__ import print_function
 from __future__ import division
 
-from tensorforce.core import Agent
+from tensorforce.agents import Agent
 
 
 class BatchAgent(Agent):
+    """
+    The `BatchAgent` class implements a batch memory, which is cleared after every update.
 
-    default_config = dict()
+    Each agent requires the following ``Configuration`` parameters:
+
+    * `states`: dict containing one or more state definitions.
+    * `actions`: dict containing one or more action definitions.
+    * `preprocessing`: dict or list containing state preprocessing configuration.
+    * `exploration`: dict containing action exploration configuration.
+
+    The `BatchAgent` class additionally requires the following parameters:
+
+    * `batch_size`: integer of the batch size.
+
+    """
+
+    default_config = dict(
+        batch_size=1
+    )
 
     def __init__(self, config):
         config.default(BatchAgent.default_config)
@@ -34,7 +51,7 @@ class BatchAgent(Agent):
         self.batch_size = config.batch_size
         self.batch = None
 
-    def observe(self, state, action, reward, terminal):
+    def observe(self, reward, terminal):
         """
         Adds an observation and performs an update if the necessary conditions
         are satisfied, i.e. if one batch of experience has been collected as defined
@@ -43,28 +60,25 @@ class BatchAgent(Agent):
         In particular, note that episode control happens outside of the agent since
         the agent should be agnostic to how the training data is created.
 
-        :param state:
-        :param action:
-        :param reward:
-        :param terminal:
-        :return:
+        Args:
+            reward: float of a scalar reward
+            terminal: boolean whether episode is terminated or not
+
+        Returns: void
         """
-        if self.unique_state:
-            state = dict(state=state)
-        if self.unique_action:
-            action = dict(action=action)
+        self.current_reward = reward
+        self.current_terminal = terminal
 
         if self.batch is None:
             self.reset_batch()
-
-        for name in self.batch['states']:
-            self.batch['states'][name].append(state[name])
-        for name in self.batch['actions']:
-            self.batch['actions'][name].append(action[name])
-        self.batch['rewards'].append(reward)
-        self.batch['terminals'].append(terminal)
-        for n, internal in enumerate(self.internals):
-            self.batch['internals'][n].append(internal)
+        for name, batch_state in self.batch['states'].items():
+            batch_state.append(self.current_state[name])
+        for name, batch_action in self.batch['actions'].items():
+            batch_action.append(self.current_action[name])
+        self.batch['rewards'].append(self.current_reward)
+        self.batch['terminals'].append(self.current_terminal)
+        for batch_internal, internal in zip(self.batch['internals'], self.current_internal):
+            batch_internal.append(internal)
 
         self.batch_count += 1
         if self.batch_count == self.batch_size:
@@ -77,6 +91,6 @@ class BatchAgent(Agent):
             actions={action: [] for action, _ in self.actions_config},
             rewards=[],
             terminals=[],
-            internals={n: [] for n in range(len(self.internals))}
+            internals=[[] for _ in range(len(self.current_internal))]
         )
         self.batch_count = 0

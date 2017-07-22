@@ -32,8 +32,7 @@ from tensorforce.core.value_functions import ValueFunction
 
 class LinearValueFunction(ValueFunction):
 
-    def __init__(self, session):
-        super(LinearValueFunction, self).__init__(session)
+    def __init__(self):
         self.coefficients = None
 
     def create_tf_operations(self, config):
@@ -47,19 +46,21 @@ class LinearValueFunction(ValueFunction):
         :param episode:
         :return: Returns value estimate or 0 if coefficients have not been set
         """
+        states = next(iter(states.values()))
         if self.coefficients is None:
-            return np.zeros(shape=(states.shape[0], 1))
+            return np.zeros(shape=(len(states), 1))
         else:
             return self.features(states).dot(self.coefficients)
 
     def update(self, states, returns):
+        states = next(iter(states.values()))
         features = self.features(states)
         columns = features.shape[1]
         self.coefficients = np.linalg.lstsq(
             features.T.dot(features) + 2 * np.identity(columns), features.T.dot(returns))[0]
 
     def features(self, states):
-        states = next(iter(states.values()))
+        states = np.array(states)
         states = states.reshape(states.shape[0], -1)
         al = np.arange(states.shape[0]).reshape(-1, 1) / 100.0
 
