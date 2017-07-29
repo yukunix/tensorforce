@@ -5,6 +5,33 @@ This file tracks all major updates and new features. As TensorForce is still in 
 we are continuously implementing small updates and bug fixes, which will not
 be tracked here in detail but through github issues.
 
+29th July 2017
+
+- Added `QModel` as base class for DQN (hence DQFD) and NAF
+- Added `next_state` placeholder to `QModel`, and boolean flag to `Memory.get_batch` to include next states
+
+
+28th July 2017
+
+- Moved external environments to tensorforce/contrib. The environment module just contains the base environment  class and our test environment going forward
+- Merged environments ALE and Maze explorer, thanks to Islandman93 and mryellow
+
+
+25th July 2017
+
+- New optional argument `shape` for action specification, if an array of actions sharing the same specification is required
+- Complete and correct mapping of OpenAIGym state/action spaces to corresponding TensorForce state/action specifications
+- `MinimalTest` environment extension for multiple actions, plus an additional multi-state/action test for each agent
+
+
+23th July 2017
+
+- Implemented prototype of Proximal Policy Optimisation (PPO)
+- Configuration argument network can now take module paths, not just functions
+- Fixed prioritized experience replay sampling bug
+- Enabling default values for distributions, see https://github.com/reinforceio/tensorforce/issues/34
+
+
 8th July 2017
 
 - BREAKING CHANGE: We modified the act and observe API once more because we think there was
@@ -30,6 +57,7 @@ on the generic agent which gives the current state, action, reward, terminal and
 -   Added prioritised experience replay
 -   Added RandomAgent for discrete/continuous random baselines
 -   Moved pre-processing from runner to agent, analogue to exploration
+
 
 11th June 2017
 

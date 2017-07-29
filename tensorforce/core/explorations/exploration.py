@@ -24,7 +24,7 @@ class Exploration(object):
 
     @staticmethod
     def from_config(config):
-        exploration = config.type
-        args = config.args if 'args' in config else ()
-        kwargs = config.kwargs if 'kwargs' in config else {}
-        return util.function(exploration, tensorforce.core.explorations.explorations)(*args, **kwargs)
+        return util.get_object(
+            obj=config,
+            predefined=tensorforce.core.explorations.explorations
+        )

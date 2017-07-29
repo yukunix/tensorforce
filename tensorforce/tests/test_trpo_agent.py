@@ -22,7 +22,7 @@ from six.moves import xrange
 
 from tensorforce import Configuration
 from tensorforce.agents import TRPOAgent
-from tensorforce.core.networks import layered_network_builder
+from tensorforce.core.networks import layered_network_builder, layers
 from tensorforce.environments.minimal_test import MinimalTest
 from tensorforce.execution import Runner
 
@@ -32,21 +32,16 @@ class TestTRPOAgent(unittest.TestCase):
     def test_discrete(self):
         passed = 0
 
-        # TRPO can occasionally have numerical issues so we allow for 1 in 5 to fail on Travis
         for _ in xrange(5):
-            environment = MinimalTest(continuous=False)
+            environment = MinimalTest(definition=False)
             config = Configuration(
                 batch_size=8,
-                learning_rate=0.0001,
-                cg_iterations=20,
-                cg_damping=0.001,
-                line_search_steps=20,
-                max_kl_divergence=0.05,
+                max_kl_divergence=0.01,
                 states=environment.states,
                 actions=environment.actions,
                 network=layered_network_builder([
-                    dict(type='dense', size=32, activation='tanh'),
-                    dict(type='dense', size=32, activation='tanh')
+                    dict(type='dense', size=32),
+                    dict(type='dense', size=32)
                 ])
             )
             agent = TRPOAgent(config=config)
@@ -55,31 +50,28 @@ class TestTRPOAgent(unittest.TestCase):
             def episode_finished(r):
                 return r.episode < 100 or not all(x >= 1.0 for x in r.episode_rewards[-100:])
 
-            runner.run(episodes=2000, episode_finished=episode_finished)
-            print('TRPO Agent (discrete): ' + str(runner.episode))
+            runner.run(episodes=1000, episode_finished=episode_finished)
+            print('TRPO agent (discrete): ' + str(runner.episode))
 
-            if runner.episode < 2000:
+            if runner.episode < 1000:
                 passed += 1
 
-        print('TRPO discrete agent passed = {}'.format(passed))
+        print('TRPO agent (discrete) passed = {}'.format(passed))
         self.assertTrue(passed >= 4)
 
     def test_continuous(self):
         passed = 0
 
         for _ in xrange(5):
-            environment = MinimalTest(continuous=True)
+            environment = MinimalTest(definition=True)
             config = Configuration(
                 batch_size=8,
-                cg_iterations=20,
-                cg_damping=0.001,
-                line_search_steps=20,
-                max_kl_divergence=0.05,
+                max_kl_divergence=0.01,
                 states=environment.states,
                 actions=environment.actions,
                 network=layered_network_builder([
-                    dict(type='dense', size=32, activation='tanh'),
-                    dict(type='dense', size=32, activation='tanh')
+                    dict(type='dense', size=32),
+                    dict(type='dense', size=32)
                 ])
             )
             agent = TRPOAgent(config=config)
@@ -88,11 +80,45 @@ class TestTRPOAgent(unittest.TestCase):
             def episode_finished(r):
                 return r.episode < 100 or not all(x >= 1.0 for x in r.episode_rewards[-100:])
 
-            runner.run(episodes=2000, episode_finished=episode_finished)
-            print('TRPO Agent (continuous): ' + str(runner.episode))
+            runner.run(episodes=1000, episode_finished=episode_finished)
+            print('TRPO agent (continuous): ' + str(runner.episode))
 
+            if runner.episode < 1000:
+                passed += 1
+
+        print('TRPO agent (continuous) passed = {}'.format(passed))
+        self.assertTrue(passed >= 4)
+
+    def test_multi(self):
+        passed = 0
+
+        def network_builder(inputs):
+            layer = layers['dense']
+            state0 = layer(x=layer(x=inputs['state0'], size=32), size=32)
+            state1 = layer(x=layer(x=inputs['state1'], size=32), size=32)
+            state2 = layer(x=layer(x=inputs['state2'], size=32), size=32)
+
+            return state0 * state1 * state2
+
+        for _ in xrange(5):
+            environment = MinimalTest(definition=[False, (False, 2), (True, 2)])
+            config = Configuration(
+                batch_size=8,
+                max_kl_divergence=0.01,
+                states=environment.states,
+                actions=environment.actions,
+                network=network_builder
+            )
+            agent = TRPOAgent(config=config)
+            runner = Runner(agent=agent, environment=environment)
+
+            def episode_finished(r):
+                return r.episode < 15 or not all(x >= 1.0 for x in r.episode_rewards[-15:])
+
+            runner.run(episodes=2000, episode_finished=episode_finished)
+            print('TRPO agent (multi-state/action): ' + str(runner.episode))
             if runner.episode < 2000:
                 passed += 1
 
-        print('TRPO continuous agent passed = {}'.format(passed))
-        self.assertTrue(passed >= 4)
+        print('TRPO agent (multi-state/action) passed = {}'.format(passed))
+        self.assertTrue(passed >= 2)

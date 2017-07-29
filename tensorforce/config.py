@@ -30,6 +30,7 @@ class Configuration(object):
 
     def __init__(self, allow_defaults=True, **kwargs):
         self._config = dict(**kwargs)
+        self._accessed = {key: False for key, value in self if not isinstance(value, Configuration)}
         self.allow_defaults = allow_defaults
 
     @staticmethod
@@ -63,29 +64,34 @@ class Configuration(object):
         return len(self._config)
 
     def items(self):
-        return self._config.items()
+        return iter(self)
 
-    def __contains__(self, name):
-        return name in self._config
+    def __contains__(self, key):
+        return key in self._config
 
-    def __getattr__(self, name):
-        if name not in self._config:
-            raise TensorForceError('Value for `{}` is not defined.'.format(name))
-        return self._config[name]
+    def __getattr__(self, key):
+        if key not in self._config:
+            raise TensorForceError('Value for `{}` is not defined.'.format(key))
+        value = self._config[key]
+        if not isinstance(value, Configuration):
+            self._accessed[key] = True
+        return value
 
-    def __getitem__(self, name):
-        return self.__getattr__(name)
+    def __getitem__(self, key):
+        return self.__getattr__(key)
 
-    def __setattr__(self, name, value):
-        if name == 'allow_defaults':
-            super(Configuration, self).__setattr__(name, value)
-        elif name == '_config':
+    def __setattr__(self, key, value):
+        if key == 'allow_defaults':
+            super(Configuration, self).__setattr__(key, value)
+        elif key == '_config':
             value = {k: make_config_value(v) for k, v in value.items()}
-            super(Configuration, self).__setattr__(name, value)
-        elif name not in self._config:
-            raise TensorForceError('Value {} is not defined.'.format(name))
+            super(Configuration, self).__setattr__(key, value)
+        elif key == '_accessed':
+            super(Configuration, self).__setattr__(key, value)
+        elif key not in self._config:
+            raise TensorForceError('Value {} is not defined.'.format(key))
         else:
-            self._config[name] = make_config_value(value)
+            self._config[key] = make_config_value(value)
 
     def keys(self):
         return self._config.keys()
@@ -100,7 +106,19 @@ class Configuration(object):
                     raise TensorForceError('This Configuration does not allow defaults. Attempt to default {}'.format(key))
                 if isinstance(value, dict):
                     value = Configuration(**value)
+                else:
+                    self._accessed[key] = False
                 self._config[key] = value
+
+    def not_accessed(self):
+        not_accessed = list()
+        for key, value in self:
+            if isinstance(value, Configuration):
+                for subkey in value.not_accessed():
+                    not_accessed.append('{}.{}'.format(key, subkey))
+            elif not self._accessed[key]:
+                not_accessed.append(key)
+        return not_accessed
 
 
 def make_config_value(value):

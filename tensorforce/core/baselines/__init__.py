@@ -13,15 +13,15 @@
 # limitations under the License.
 # ==============================================================================
 
-from tensorforce.core.value_functions.value_function import ValueFunction
-from tensorforce.core.value_functions.linear import LinearValueFunction
-from tensorforce.core.value_functions.mlp import MLPValueFunction
+from tensorforce.core.baselines.baseline import Baseline
+from tensorforce.core.baselines.linear import LinearBaseline
+from tensorforce.core.baselines.mlp import MLPBaseline
 
 
-value_functions = dict(
-    linear=LinearValueFunction,
-    mlp=MLPValueFunction
+baselines = dict(
+    linear=LinearBaseline,
+    mlp=MLPBaseline
 )
 
 
-__all__ = ['ValueFunction', 'LinearValueFunction', 'MLPValueFunction', 'value_functions']
+__all__ = ['Baseline', 'LinearBaseline', 'MLPBaseline', 'baselines']

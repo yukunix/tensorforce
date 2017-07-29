@@ -17,14 +17,56 @@ from __future__ import absolute_import
 from __future__ import print_function
 from __future__ import division
 
+from tensorforce import util
+import tensorforce.core.memories
+
 
 class Memory(object):
+
+    def __init__(self, capacity, states_config, actions_config):
+        self.capacity = capacity
+        self.states_config = states_config
+        self.actions_config = actions_config
 
     def add_observation(self, state, action, reward, terminal, internal):
         raise NotImplementedError
 
-    def get_batch(self, batch_size):
+    def get_batch(self, batch_size, next_states=False):
+        """
+        Samples a batch from the memory
+
+        Args:
+            batch_size: The batch size
+            next_states: A boolean flag indicating whether 'next_states' values should be included
+
+        Returns: A dict containing states, actions, rewards, terminals, internal states (and next states)
+
+        """
         raise NotImplementedError
 
     def update_batch(self, loss_per_instance):
         raise NotImplementedError
+
+    def set_memory(self, states, actions, rewards, terminals, internals):
+        """
+        Deletes memory content and sets content to provided observations.
+
+        Args:
+            states:
+            actions:
+            rewards:
+            terminals:
+            internals:
+
+        Returns:
+
+        """
+        raise NotImplementedError
+
+    @staticmethod
+    def from_config(config, kwargs=None):
+        return util.get_object(
+            obj=config,
+            predefined=tensorforce.core.memories.memories,
+            kwargs=kwargs
+        )

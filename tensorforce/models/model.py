@@ -16,9 +16,7 @@
 Models provide the general interface to TensorFlow functionality,
 manages TensorFlow session and execution. In particular, a agent for reinforcement learning
 always needs to provide a function that gives an action, and one to trigger updates.
-A agent may use one more multiple neural networks and implement the update logic of a particular
-RL algorithm.
-
+A agent may use one more multiple neural networks and implement the update logic of a particular RL algorithm.
 """
 
 from __future__ import absolute_import
@@ -29,16 +27,7 @@ import logging
 import tensorflow as tf
 
 from tensorforce import TensorForceError, util
-from tensorforce.core.optimizers import optimizers
-
-
-log_levels = {
-    'info': logging.INFO,
-    'debug': logging.DEBUG,
-    'critical': logging.CRITICAL,
-    'warning': logging.WARNING,
-    'fatal': logging.FATAL
-}
+from tensorforce.core.optimizers import Optimizer
 
 
 class Model(object):
@@ -50,10 +39,7 @@ class Model(object):
     * `discount`: float of discount factor (gamma).
     * `learning_rate`: float of learning rate (alpha).
     * `optimizer`: string of optimizer to use (e.g. 'adam').
-    * `optimizer_args`: list of arguments for optimizer.
-    * `optimizer_kwargs`: dict of keyword arguments for optimizer.
     * `device`: string of tensorflow device name.
-    * `tf_saver`: boolean whether to save model parameters.
     * `tf_summary`: boolean indicating whether to use tensorflow summary file writer.
     * `log_level`: string containing logleve (e.g. 'info').
     * `distributed`: boolean indicating whether to use distributed tensorflow.
@@ -68,12 +54,8 @@ class Model(object):
         discount=0.97,
         learning_rate=0.0001,
         optimizer='adam',
-        optimizer_args=None,
-        optimizer_kwargs=None,
         device=None,
-        tf_saver=False,
         tf_summary=None,
-        log_level='info',
         distributed=False,
         global_model=False,
         session=None
@@ -94,9 +76,8 @@ class Model(object):
         self.distributed = config.distributed
         self.session = None
 
-        # TODO: change/remove
         self.logger = logging.getLogger(__name__)
-        self.logger.setLevel(log_levels[config.log_level])
+        self.logger.setLevel(util.log_levels[config.log_level])
 
         if not config.distributed:
             assert not config.global_model and config.session is None
@@ -113,6 +94,7 @@ class Model(object):
             self.global_episode = self.global_model.episode
             self.global_variables = self.global_model.variables
 
+        self.optimizer_args = None
         with tf.device(config.device):
             if config.distributed:
                 if config.global_model:
@@ -132,14 +114,22 @@ class Model(object):
             if self.optimizer:
                 if config.distributed and not config.global_model:
                     self.loss = tf.add_n(inputs=tf.losses.get_losses(scope=scope.name))
-                    local_gradients = tf.gradients(self.loss, self.variables)
+                    local_grads_and_vars = self.optimizer.compute_gradients(loss=self.loss, var_list=self.variables)
+                    local_gradients = [grad for grad, var in local_grads_and_vars]
                     global_gradients = list(zip(local_gradients, self.global_model.variables))
                     self.update_local = tf.group(*(v1.assign(v2) for v1, v2 in zip(self.variables, self.global_model.variables)))
-                    self.optimize = tf.group(self.optimizer.apply_gradients(global_gradients), self.update_local, self.global_timestep.assign_add(tf.shape(self.reward)[0]))
+                    self.optimize = tf.group(
+                        self.optimizer.apply_gradients(grads_and_vars=global_gradients),
+                        self.update_local,
+                        self.global_timestep.assign_add(tf.shape(self.reward)[0]))
                     self.increment_global_episode = self.global_episode.assign_add(tf.count_nonzero(input_tensor=self.terminal, dtype=tf.int32))
                 else:
                     self.loss = tf.losses.get_total_loss()
-                    self.optimize = self.optimizer.minimize(self.loss)
+                    if self.optimizer_args is not None:
+                        self.optimizer_args['loss'] = self.loss
+                        self.optimize = self.optimizer.minimize(self.optimizer_args)
+                    else:
+                        self.optimize = self.optimizer.minimize(self.loss)
 
             if config.distributed:
                 scope_context.__exit__(None, None, None)
@@ -185,11 +175,11 @@ class Model(object):
                 if action.continuous:
                     if not self.__class__.allows_continuous_actions:
                         raise TensorForceError("Error: Model does not support continuous actions.")
-                    self.action[name] = tf.placeholder(dtype=util.tf_dtype('float'), shape=(None,), name=name)
+                    self.action[name] = tf.placeholder(dtype=util.tf_dtype('float'), shape=(None,) + tuple(action.shape), name=name)
                 else:
                     if not self.__class__.allows_discrete_actions:
                         raise TensorForceError("Error: Model does not support discrete actions.")
-                    self.action[name] = tf.placeholder(dtype=util.tf_dtype('int'), shape=(None,), name=name)
+                    self.action[name] = tf.placeholder(dtype=util.tf_dtype('int'), shape=(None,) + tuple(action.shape), name=name)
 
             # Reward & terminal
             self.reward = tf.placeholder(dtype=tf.float32, shape=(None,), name='reward')
@@ -200,12 +190,11 @@ class Model(object):
 
         # Optimizer
         if config.optimizer is not None:
-            learning_rate = config.learning_rate
             with tf.variable_scope('optimization'):
-                optimizer = util.function(config.optimizer, optimizers)
-                args = config.optimizer_args or ()
-                kwargs = config.optimizer_kwargs or {}
-                self.optimizer = optimizer(learning_rate, *args, **kwargs)
+                self.optimizer = Optimizer.from_config(
+                    config=config.optimizer,
+                    kwargs=dict(learning_rate=config.learning_rate)
+                )
         else:
             self.optimizer = None
 
@@ -249,19 +238,25 @@ class Model(object):
             return
 
         fetches = [self.optimize, self.loss, self.loss_per_instance]
-
-        feed_dict = {state: batch['states'][name] for name, state in self.state.items()}
-        feed_dict.update({action: batch['actions'][name] for name, action in self.action.items()})
-        feed_dict[self.reward] = batch['rewards']
-        feed_dict[self.terminal] = batch['terminals']
-        feed_dict.update({internal_input: batch['internals'][n] for n, internal_input in enumerate(self.internal_inputs)})
+        feed_dict = self.update_feed_dict(batch=batch)
 
         if self.distributed:
             fetches.extend(self.increment_global_episode for terminal in batch['terminals'] if terminal)
             loss, loss_per_instance = self.session.run(fetches=fetches, feed_dict=feed_dict)[1:3]
         else:
             loss, loss_per_instance = self.session.run(fetches=fetches, feed_dict=feed_dict)[1:]
+
+        self.logger.debug('Computed update with loss = {}.'.format(loss))
+
         return loss, loss_per_instance
+
+    def update_feed_dict(self, batch):
+        feed_dict = {state: batch['states'][name] for name, state in self.state.items()}
+        feed_dict.update({action: batch['actions'][name] for name, action in self.action.items()})
+        feed_dict[self.reward] = batch['rewards']
+        feed_dict[self.terminal] = batch['terminals']
+        feed_dict.update({internal: batch['internals'][n] for n, internal in enumerate(self.internal_inputs)})
+        return feed_dict
 
     def load_model(self, path):
         self.saver.restore(self.session, path)

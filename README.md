@@ -42,7 +42,7 @@ Features
 --------
 
 TensorForce currently integrates with the OpenAI Gym API, OpenAI
-Universe and DeepMind lab. The following algorithms are available (all
+Universe, DeepMind lab, ALE and Maze explorer. The following algorithms are available (all
 policy methods both continuous/discrete):
 
 1.  A3C using distributed TensorFlow - now as part of our generic Model
@@ -54,6 +54,7 @@ policy methods both continuous/discrete):
 5.  Vanilla Policy Gradients (VPG)
 6.  Deep Q-learning from Demonstration (DQFD) -
     [paper](https://arxiv.org/abs/1704.03732)
+7.  Proximal Policy Optimisation (PPO)  - [paper](https://arxiv.org/abs/1707.06347)
 
 Installation
 ------------
@@ -148,13 +149,13 @@ from tensorforce.agents import TRPOAgent
 from tensorforce.core.networks import layered_network_builder
 
 config = Configuration(
-  batch_size=100,
-  state=dict(shape=(10,)),
-  actions=dict(continuous=False, num_actions=2)
-  network=layered_network_builder([dict(type='dense', size=50), dict(type='dense', size=50)])
+    batch_size=100,
+    states=dict(shape=(10,), type='float'),
+    actions=dict(continuous=False, num_actions=2),
+    network=layered_network_builder([dict(type='dense', size=50), dict(type='dense', size=50)])
 )
 
-# Create a Trust Region Policy Optimization agent, reset internal state 
+# Create a Trust Region Policy Optimization agent
 agent = TRPOAgent(config=config)
 
 # Get new data from somewhere, e.g. a client to a web app

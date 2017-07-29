@@ -21,14 +21,51 @@ from __future__ import absolute_import
 from __future__ import print_function
 from __future__ import division
 
+from tensorforce import util
+import tensorforce.core.baselines
 
-class ValueFunction(object):
+
+class Baseline(object):
 
     def create_tf_operations(self, config):
         raise NotImplementedError
 
     def predict(self, states):
+        """Predicts the state-value function V(s)
+
+        Args:
+            states: State or batch of states
+
+        Returns: V(s)
+
+        """
         raise NotImplementedError
 
     def update(self, states, returns):
+        """
+        Fits baseline to returns.
+
+        Args:
+            states: State or batch of states
+            returns: Returns for states
+
+        Returns:
+
+        """
         raise NotImplementedError
+
+    @staticmethod
+    def from_config(config):
+        """
+        Creates a baseline from a configuration dict.
+
+        Args:
+            config:
+
+        Returns:
+
+        """
+        return util.get_object(
+            obj=config,
+            predefined=tensorforce.core.baselines.baselines
+        )

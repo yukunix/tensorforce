@@ -23,18 +23,14 @@ from __future__ import print_function
 
 import tensorflow as tf
 
-from tensorforce.models import Model
-from tensorforce.core.networks import NeuralNetwork, layers
+from tensorforce import util
+from tensorforce.models import DQNModel
 
 
-class DQFDModel(Model):
-
-    allows_discrete_actions = True
-    allows_continuous_actions = False
+class DQFDModel(DQNModel):
 
     default_config = dict(
-        update_target_weight=1.0,
-        clip_gradients=0.0,
+        double_dqn=True,
         supervised_weight=1.0,
         expert_margin=0.8
     )
@@ -55,103 +51,33 @@ class DQFDModel(Model):
         """
         super(DQFDModel, self).create_tf_operations(config)
 
-        num_actions = {name: action.num_actions for name, action in config.actions}
-
-        # placeholders
-        with tf.variable_scope('placeholders'):
-            self.q_targets = tf.placeholder(tf.float32, (None,), name='q_targets')
-
-        # Training network
-        with tf.variable_scope('training'):
-            self.training_network = NeuralNetwork(config.network, inputs={name: state for name, state in self.state.items()})
-            self.internal_inputs.extend(self.training_network.internal_inputs)
-            self.internal_outputs.extend(self.training_network.internal_outputs)
-            self.internal_inits.extend(self.training_network.internal_inits)
-
-            training_output = dict()
-
-            for action in self.action:
-                training_output[action] = layers['linear'](x=self.training_network.output, size=num_actions[action])
-                self.action_taken[action] = tf.argmax(training_output[action], axis=1)
-
-        # Target network
-        with tf.variable_scope('target'):
-            self.target_network = NeuralNetwork(config.network, inputs={name: state for name, state in self.state.items()})
-            self.internal_inputs.extend(self.target_network.internal_inputs)
-            self.internal_outputs.extend(self.target_network.internal_outputs)
-            self.internal_inits.extend(self.target_network.internal_inits)
-
-            target_value = dict()
-
-            for action in self.action:
-                target_output = layers['linear'](x=self.target_network.output, size=num_actions[action])
-                selector = tf.one_hot(self.action_taken[action], num_actions[action])
-                target_value[action] = tf.reduce_sum(tf.multiply(target_output, selector), axis=1)
-
-        with tf.name_scope("update"):
-            self.dqfd_opt = []
-
-            for action in self.action:
-                # Self.q_targets gets fed the actual observed rewards and expected future rewards
-                # One_hot tensor of the actions that have been taken
-                action_one_hot = tf.one_hot(self.action[action][:-1], num_actions[action])
-
-                # Training output, so we get the expected rewards given the actual states and actions
-                q_value = tf.reduce_sum(training_output[action][:-1] * action_one_hot, axis=1)
-
-                # Surrogate loss as the mean squared error between actual observed rewards and expected rewards
-                q_target = self.reward[:-1] + (1.0 - tf.cast(self.terminal[:-1], tf.float32)) * self.discount * target_value[action][1:]
-                delta = q_target - q_value
-                self.loss_per_instance = tf.square(delta)
-
-                # If gradient clipping is used, calculate the huber loss
-                if config.clip_gradients > 0.0:
-                    huber_loss = tf.where(tf.abs(delta) < config.clip_gradients, 0.5 * self.loss_per_instance, tf.abs(delta) - 0.5)
-                    double_q_loss = tf.reduce_mean(huber_loss)
-                else:
-                    double_q_loss = tf.reduce_mean(self.loss_per_instance)
-
-                # Use the existing loss structure from the model here, then compute dqfd loss separately
-                tf.losses.add_loss(double_q_loss)
-
+        with tf.name_scope('supervised-update'):
+            deltas = list()
+            for name, action in self.action.items():
                 # Create the supervised margin loss
-                mask = tf.ones_like(action_one_hot, dtype=tf.float32)
-
                 # Zero for the action taken, one for all other actions, now multiply by expert margin
-                inverted_one_hot = mask - action_one_hot
+                one_hot = tf.one_hot(indices=action, depth=config.actions[name].num_actions)
+                ones = tf.ones_like(tensor=one_hot, dtype=tf.float32)
+                inverted_one_hot = ones - one_hot
 
                 # max_a([Q(s,a) + l(s,a_E,a)], l(s,a_E, a) is 0 for expert action and margin value for others
-                expert_margin = training_output[action][:-1] + tf.multiply(inverted_one_hot, config.expert_margin)
-
-                supervised_selector = tf.reduce_max(expert_margin, axis=1, name='expert_margin_selector')
+                expert_margin = self.training_output[name] + inverted_one_hot * config.expert_margin
 
                 # J_E(Q) = max_a([Q(s,a) + l(s,a_E,a)] - Q(s,a_E)
-                supervised_loss = supervised_selector - q_value
+                supervised_selector = tf.reduce_max(input_tensor=expert_margin, axis=-1)
+                delta = supervised_selector - self.q_values[name]
+                delta = tf.reshape(tensor=delta, shape=(-1, util.prod(config.actions[name].shape)))
+                deltas.append(delta)
 
-                # Combining double q loss with supervised loss
-                dqfd_loss = double_q_loss + tf.multiply(tf.reduce_mean(supervised_loss), config.supervised_weight)
+            delta = tf.reduce_mean(input_tensor=tf.concat(values=deltas, axis=1), axis=1)
+            supervised_loss_per_instance = tf.square(delta)
+            supervised_loss = tf.reduce_mean(input_tensor=supervised_loss_per_instance)
 
-                # This decomposition is not necessary, we just want to be able to export gradients
-                dqfd_grads_and_vars = self.optimizer.compute_gradients(dqfd_loss)
+            # Combining double q loss with supervised loss
+            dqfd_loss = self.q_loss + supervised_loss * config.supervised_weight
+            self.dqfd_optimize = self.optimizer.minimize(dqfd_loss)
 
-                self.dqfd_opt.append(self.optimizer.apply_gradients(dqfd_grads_and_vars))
-
-        # Update target network according to update weight
-        self.target_network_update = []
-
-        with tf.name_scope("update_target"):
-            for v_source, v_target in zip(self.training_network.variables, self.target_network.variables):
-                update = v_target.assign_sub(config.update_target_weight * (v_target - v_source))
-                self.target_network_update.append(update)
-
-    def update_target(self):
-        """
-        Updates target network.
-
-        """
-        self.session.run(self.target_network_update)
-
-    def demonstration_update(self, batch=None):
+    def demonstration_update(self, batch):
         """Computes the demonstration update.
 
         Args:
@@ -161,13 +87,6 @@ class DQFDModel(Model):
 
         """
 
-        fetches = self.dqfd_opt
-
-        feed_dict = {state: batch['states'][name] for name, state in self.state.items()}
-        feed_dict.update({action: batch['actions'][name] for name, action in self.action.items()})
-
-        feed_dict[self.reward] = batch['rewards']
-        feed_dict[self.terminal] = batch['terminals']
-        feed_dict.update({internal: batch['internals'][n] for n, internal in enumerate(self.internal_inputs)})
-
+        fetches = self.dqfd_optimize
+        feed_dict = self.update_feed_dict(batch=batch)
         self.session.run(fetches=fetches, feed_dict=feed_dict)

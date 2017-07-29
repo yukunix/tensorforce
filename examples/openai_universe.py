@@ -35,15 +35,12 @@ import logging
 import os
 
 import numpy as np
-
-import go_vncdriver
+from tensorforce.core.model import log_levels
 
 from tensorforce import Configuration, TensorForceError
 from tensorforce.agents import create_agent
-from tensorforce.core.model import log_levels
-from tensorforce.core.preprocessing import build_preprocessing_stack
-from tensorforce.environments.openai_universe import OpenAIUniverse
 from tensorforce.execution import Runner
+from tensorforce.contrib.openai_universe import OpenAIUniverse
 
 
 def main():
@@ -95,7 +92,7 @@ def main():
         print(config)
 
     logger = logging.getLogger(__name__)
-    logger.setLevel(log_levels[config.loglevel])
+    logger.setLevel(log_levels[config.log_level])
 
     stack = None
 
