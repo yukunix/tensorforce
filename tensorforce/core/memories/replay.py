@@ -22,7 +22,6 @@ from __future__ import print_function
 from __future__ import division
 
 from random import randrange
-from six.moves import xrange
 import numpy as np
 
 from tensorforce import util
@@ -31,7 +30,7 @@ from tensorforce.core.memories import Memory
 
 class Replay(Memory):
 
-    def __init__(self, capacity, states_config, actions_config, random_sampling=False):
+    def __init__(self, capacity, states_config, actions_config, random_sampling=True):
         super(Replay, self).__init__(capacity, states_config, actions_config)
         self.states = {name: np.zeros((capacity,) + tuple(state.shape), dtype=util.np_dtype(state.type)) for name, state in states_config}
         self.actions = {name: np.zeros((capacity,) + tuple(action.shape), dtype=util.np_dtype('float' if action.continuous else 'int')) for name, action in actions_config}
@@ -72,7 +71,11 @@ class Replay(Memory):
 
         """
         if self.random_sampling:
-            indices = np.random.randint(self.size, size=batch_size)
+            rand_end = (self.size - 1) if next_states else self.size
+            indices = np.random.randint(rand_end, size=batch_size)
+            if self.index < self.size:
+                # self.index points to the head of the circular buffer
+                indices = (indices + self.index) % self.capacity
             states = {name: state.take(indices, axis=0) for name, state in self.states.items()}
             actions = {name: action.take(indices, axis=0) for name, action in self.actions.items()}
             rewards = self.rewards.take(indices)
@@ -81,9 +84,11 @@ class Replay(Memory):
             if next_states:
                 indices = (indices + 1) % self.capacity
                 next_states = {name: state.take(indices, axis=0) for name, state in self.states.items()}
+                next_internals = [internal.take(indices, axis=0) for internal in self.internals]
 
         else:
-            end = (self.index - randrange(self.size - batch_size + 1)) % self.capacity
+            rand_start = 1 if next_states else 0
+            end = (self.index - randrange(rand_start, self.size - batch_size + 1)) % self.capacity
             start = (end - batch_size) % self.capacity
 
             if start < end:
@@ -94,6 +99,7 @@ class Replay(Memory):
                 internals = [internal[start:end] for internal in self.internals]
                 if next_states:
                     next_states = {name: state[start + 1: end + 1] for name, state in self.states.items()}
+                    next_internals = [internal[start + 1: end + 1] for internal in self.internals]
 
             else:
                 states = {name: np.concatenate((state[start:], state[:end])) for name, state in self.states.items()}
@@ -103,10 +109,12 @@ class Replay(Memory):
                 internals = [np.concatenate((internal[start:], internal[:end])) for internal in self.internals]
                 if next_states:
                     next_states = {name: np.concatenate((state[start + 1:], state[:end + 1])) for name, state in self.states.items()}
+                    next_internals = [np.concatenate((internal[start + 1:], internal[:end + 1])) for internal in self.internals]
 
         batch = dict(states=states, actions=actions, rewards=rewards, terminals=terminals, internals=internals)
         if next_states:
             batch['next_states'] = next_states
+            batch['next_internals'] = next_internals
         return batch
 
     def update_batch(self, loss_per_instance):
@@ -134,6 +142,7 @@ class Replay(Memory):
             self.rewards[:len(rewards)] = rewards
             self.terminals[:len(terminals)] = terminals
             if self.internals is None and internals is not None:
-                self.internals = [np.zeros((self.capacity,) + internal.shape, internal.dtype) for internal in internals]
+                self.internals = [np.zeros((self.capacity,) + internal.shape, internal.dtype) for internal
+                                  in internals]
             for n, internal in enumerate(internals):
                 self.internals[n][:len(internal)] = internal

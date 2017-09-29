@@ -22,6 +22,8 @@ from __future__ import absolute_import
 from __future__ import print_function
 from __future__ import division
 
+import time
+
 from six.moves import xrange
 import tensorflow as tf
 
@@ -31,7 +33,7 @@ from tensorforce import TensorForceError
 class Runner(object):
 
     # These agents can be used in an A3C fashion
-    async_supported = ('VPGAgent', 'DQNAgent', 'NAFAgent')
+    async_supported = ('VPGAgent', 'PPOAgent')  # And potentially TRPOAgent, needs to be checked...
 
     def __init__(self, agent, environment, repeat_actions=1, cluster_spec=None, task_index=None, save_path=None, save_episodes=None):
         """
@@ -119,15 +121,18 @@ class Runner(object):
         # save episode reward and length for statistics
         self.episode_rewards = []
         self.episode_lengths = []
+        self.episode_times = []
 
         self.total_timesteps = 0
         self.episode = 1
+        self.start_time = time.time()
         while True:
             state = self.environment.reset()
             self.agent.reset()
             episode_reward = 0
 
             self.timestep = 0
+            episode_start_time = time.time()
             while True:
                 action = self.agent.act(state=state)
                 if self.repeat_actions > 1:
@@ -149,8 +154,11 @@ class Runner(object):
                 if terminal or self.timestep == max_timesteps:
                     break
 
+            self.agent.observe_episode_reward(episode_reward)
+            time_passed = time.time() - episode_start_time
             self.episode_rewards.append(episode_reward)
             self.episode_lengths.append(self.timestep)
+            self.episode_times.append(time_passed)
 
             if self.save_path and self.save_episodes is not None and self.episode % self.save_episodes == 0:
                 print("Saving agent after episode {}".format(self.episode))

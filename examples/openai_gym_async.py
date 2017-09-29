@@ -15,6 +15,15 @@
 
 """
 OpenAI gym execution
+
+To run this script with 3 workers:
+$ python examples/openai_gym_async.py Pong-ram-v0 -a VPGAgent -c examples/configs/vpg_agent.json -n examples/configs/vpg_network.json -w 3 -D
+
+You can check what the workers are doing:
+$ tmux a -t openai_async  # `ctrl+b d` to exit tmux
+
+To kill the session:
+$ python examples/openai_gym_async.py Pong-ram-v0 -a VPGAgent -c examples/configs/vpg_agent.json -n examples/configs/vpg_network.json -w 3 -D -K
 """
 
 from __future__ import absolute_import
@@ -26,6 +35,7 @@ import inspect
 import logging
 import os
 import sys
+import time
 
 import tensorflow as tf
 from six.moves import xrange, shlex_quote
@@ -35,7 +45,7 @@ from tensorforce.agents import agents
 from tensorforce.core.networks import from_json
 from tensorforce.execution import Runner
 from tensorforce.contrib.openai_gym import OpenAIGym
-from tensorforce.models.model import log_levels
+from tensorforce.util import log_levels
 
 
 def main():
@@ -145,7 +155,7 @@ def main():
     agent_config.default(dict(distributed=True, cluster_spec=cluster_spec, global_model=(args.task_index == -1), device=('/job:ps' if args.task_index == -1 else '/job:worker/task:{}/cpu:0'.format(args.task_index))))
 
     logger = logging.getLogger(__name__)
-    logger.setLevel(log_levels[agent_config.loglevel])
+    logger.setLevel(log_levels[agent_config.log_level])
 
     agent = agents[args.agent](config=agent_config)
 
@@ -167,7 +177,8 @@ def main():
 
     def episode_finished(r):
         if r.episode % report_episodes == 0:
-            logger.info("Finished episode {ep} after {ts} timesteps".format(ep=r.episode, ts=r.timestep))
+            sps = r.total_timesteps / (time.time() - r.start_time)
+            logger.info("Finished episode {ep} after {ts} timesteps. Steps Per Second {sps}".format(ep=r.episode, ts=r.timestep, sps=sps))
             logger.info("Episode reward: {}".format(r.episode_rewards[-1]))
             logger.info("Average of last 500 rewards: {}".format(sum(r.episode_rewards[-500:]) / 500))
             logger.info("Average of last 100 rewards: {}".format(sum(r.episode_rewards[-100:]) / 100))

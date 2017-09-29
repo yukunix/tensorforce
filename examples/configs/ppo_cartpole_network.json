@@ -3,6 +3,7 @@
         "type": "dense",
         "size": 32,
         "activation": "tanh"
+
     },
     {
         "type": "dense",

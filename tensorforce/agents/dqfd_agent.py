@@ -15,7 +15,7 @@
 
 """
 Deep Q-learning from demonstration. This agent pre-trains from demonstration data.
- 
+
 Original paper: 'Learning from Demonstrations for Real World Reinforcement Learning'
 
 https://arxiv.org/abs/1704.03732
@@ -50,7 +50,9 @@ class DQFDAgent(MemoryAgent):
     * `learning_rate`: float of learning rate (alpha).
     * `optimizer`: string of optimizer to use (e.g. 'adam').
     * `device`: string of tensorflow device name.
-    * `tf_summary`: boolean indicating whether to use tensorflow summary file writer.
+    * `tf_summary`: string directory to write tensorflow summaries. Default None
+    * `tf_summary_level`: int indicating which tensorflow summaries to create.
+    * `tf_summary_interval`: int number of calls to get_action until writing tensorflow summaries on update.
     * `log_level`: string containing logleve (e.g. 'info').
     * `distributed`: boolean indicating whether to use distributed tensorflow.
     * `global_model`: global model.
@@ -72,7 +74,7 @@ class DQFDAgent(MemoryAgent):
     * `demo_sampling_ratio`: float, ratio of expert data used at runtime to train from.
     * `supervised_weight`: float, weight of large margin classifier loss.
     * `expert_margin`: float of difference in Q-values between expert action and other actions enforced by the large margin function.
-    * `clip_gradients`: float of maximum values for gradients before clipping.
+    * `clip_loss`: float if not 0, uses the huber loss with clip_loss as the linear bound
 
 
     """
@@ -83,7 +85,7 @@ class DQFDAgent(MemoryAgent):
     default_config = dict(
         target_update_frequency=10000,
         demo_memory_capacity=1000000,
-        demo_sampling_ratio=0.01
+        demo_sampling_ratio=0.01,
     )
 
     def __init__(self, config, model=None):
@@ -104,10 +106,10 @@ class DQFDAgent(MemoryAgent):
         """Adds observations, updates via sampling from memories according to update rate.
         DQFD samples from the online replay memory and the demo memory with
         the fractions controlled by a hyper parameter p called 'expert sampling ratio.
-        
+
         Args:
-            reward: 
-            terminal: 
+            reward:
+            terminal:
 
         Returns:
 
@@ -119,14 +121,13 @@ class DQFDAgent(MemoryAgent):
                 batch = self.demo_memory.get_batch(self.demo_batch_size)
                 self.model.demonstration_update(batch=batch)
 
-        if self.timestep >= self.first_update and self.timestep % self.target_update_frequency == 0:
-            self.model.update_target()
-
     def import_demonstrations(self, demonstrations):
-        """Imports demonstrations, i.e. expert observations
+        """Imports demonstrations, i.e. expert observations. Note that for large numbers of observations,
+        set_demonstrations is more appropriate, which directly sets memory contents to an array an expects
+        a different layout.
 
         Args:
-            demonstrations: 
+            demonstrations: List of observation dicts
 
         Returns:
 
@@ -148,9 +149,28 @@ class DQFDAgent(MemoryAgent):
                 internal=observation['internal']
             )
 
+    def set_demonstrations(self, batch):
+        """
+        Set all demonstrations from batch data. Expects a dict wherein each value contains an array
+        containing all states, actions, rewards, terminals and internals respectively.
+        of
+        Args:
+            batch:
+
+        Returns:
+
+        """
+        self.demo_memory.set_memory(
+            states=batch['states'],
+            actions=batch['actions'],
+            rewards=batch['rewards'],
+            terminals=batch['terminals'],
+            internals=batch['internals']
+        )
+
     def pretrain(self, steps):
         """Computes pretrain updates.
-        
+
         Args:
             steps: Number of updates to execute.
 

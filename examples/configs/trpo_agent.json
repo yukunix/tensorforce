@@ -1,21 +1,20 @@
 {
   "log_level": "info",
-  "override_line_search": false,
+
   "batch_size": 1000,
   "discount": 0.97,
+  "max_kl_divergence": 0.1,
+  "cg_iterations" : 20,
+  "cg_damping" : 0.001,
+  "ls_max_backtracks" : 10,
+  "ls_accept_ratio": 0.9,
+  "ls_override": false,
+
   "baseline": {
     "type": "mlp",
-    "size": 32,
-    "hidden_layers": 2,
-    "repeat_update": 100
-  },
-  "generalized_advantage_estimation": true,
-  "normalize_advantage" : false,
-  "gae_lambda": 0.97,
-  "cg_iterations" : 20,
-  "cg_damping" : 0.01,
-  "line_search_steps" : 20,
-  "max_kl_divergence": 0.005,
-  "continuous": false,
-  "preprocessing": null
+    "sizes": [32, 32],
+    "epochs": 1,
+    "update_batch_size" : 250,
+    "learning_rate": 0.01
+  }
 }

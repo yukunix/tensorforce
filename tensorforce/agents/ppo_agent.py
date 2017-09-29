@@ -42,15 +42,16 @@ class PPOAgent(BatchAgent):
     The `BatchAgent` class additionally requires the following parameters:
 
     * `batch_size`: integer of the batch size.
+    * `keep_last`: bool optionally keep the last observation for use in the next batch
 
     A Policy Gradient Model expects the following additional configuration parameters:
 
     * `baseline`: string indicating the baseline value function (currently 'linear' or 'mlp').
     * `baseline_args`: list of arguments for the baseline value function.
     * `baseline_kwargs`: dict of keyword arguments for the baseline value function.
-    * `generalized_advantage_estimation`: boolean indicating whether to use GAE estimation.
-    * `gae_lambda`: float of the Generalized Advantage Estimation lambda.
-    * `normalize_advantage`: boolean indicating whether to normalize the advantage or not.
+    * `gae_rewards`: boolean indicating whether to use GAE reward estimation.
+    * `gae_lambda`: GAE lambda.
+    * `normalize_rewards`: boolean indicating whether to normalize rewards.
 
 
     The TRPO agent expects the following additional configuration parameters:

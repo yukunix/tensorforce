@@ -5,10 +5,35 @@ This file tracks all major updates and new features. As TensorForce is still in 
 we are continuously implementing small updates and bug fixes, which will not
 be tracked here in detail but through github issues.
 
+2nd September 2017
+
+- Added multi-LSTM support
+- Fixed various bugs around reporting and logging
+- Introduced CNN baseline
+- Added baseline support for multiple states (experimental). Every state gets its own baseline
+  and predictions are averaged
+
+13th August 2017
+
+- Fixed PPO performance issues, which we now recommend as the default
+- Implemented Beta distribution for bounded actions
+- Added n-step DQN and multithreaded runner
+- Fixed wrong internal calculation of `prob_ratio` and `kl_divergence` in TRPO/PPO
+- Added `next_internals` functionality to memories and QModel
+- Changed config value names related to advantage estimation to `gae_rewards` and `normalize_rewards`
+
+
+3rd August 2017
+
+- Added `ls_accept_ratio=0.01` and adapted names of other TRPO config parameters related to line search
+- Various bugs in Categorical DQN and Q-model target network scope fixed by @Islandman93
+- Refactored distributions, categorical now using Gumbel-softmax
+
 29th July 2017
 
 - Added `QModel` as base class for DQN (hence DQFD) and NAF
 - Added `next_state` placeholder to `QModel`, and boolean flag to `Memory.get_batch` to include next states
+- `Configuration` now keeps track of which values were accessed, and `Agent` reports warning if not all were accessed
 
 
 28th July 2017

@@ -59,7 +59,9 @@ class DQNAgent(MemoryAgent):
     * `learning_rate`: float of learning rate (alpha).
     * `optimizer`: string of optimizer to use (e.g. 'adam').
     * `device`: string of tensorflow device name.
-    * `tf_summary`: boolean indicating whether to use tensorflow summary file writer.
+    * `tf_summary`: string directory to write tensorflow summaries. Default None
+    * `tf_summary_level`: int indicating which tensorflow summaries to create.
+    * `tf_summary_interval`: int number of calls to get_action until writing tensorflow summaries on update.
     * `log_level`: string containing logleve (e.g. 'info').
     * `distributed`: boolean indicating whether to use distributed tensorflow.
     * `global_model`: global model.
@@ -70,23 +72,9 @@ class DQNAgent(MemoryAgent):
     * `target_update_frequency`: int of states between updates of the target network.
     * `update_target_weight`: float of update target weight (tau parameter).
     * `double_dqn`: boolean indicating whether to use double-dqn.
-    * `clip_gradients`: float of maximum values for gradients before clipping.
+    * `clip_loss`: float if not 0, uses the huber loss with clip_loss as the linear bound
 
     """
 
     name = 'DQNAgent'
     model = DQNModel
-    default_config = dict(
-        target_update_frequency=10000
-    )
-
-    def __init__(self, config, model=None):
-        config.default(MemoryAgent.default_config)
-        super(DQNAgent, self).__init__(config, model)
-        self.target_update_frequency = config.target_update_frequency
-
-    def observe(self, reward, terminal):
-        super(DQNAgent, self).observe(reward=reward, terminal=terminal)
-
-        if self.timestep >= self.first_update and self.timestep % self.target_update_frequency == 0:
-            self.model.update_target()

@@ -43,23 +43,31 @@ Features
 
 TensorForce currently integrates with the OpenAI Gym API, OpenAI
 Universe, DeepMind lab, ALE and Maze explorer. The following algorithms are available (all
-policy methods both continuous/discrete):
+policy methods both continuous/discrete and using a Beta distribution for bounded actions). 
 
-1.  A3C using distributed TensorFlow - now as part of our generic Model
-    usable with different agents
-2.  Trust Region Policy Optimization (TRPO) with generalised advantage
+-  A3C using distributed TensorFlow or a multithreaded runner - now as part of our generic Model
+    usable with different agents.
+-  Trust Region Policy Optimization (TRPO) with generalised advantage
     estimation (GAE)
-3.  Normalised Advantage functions (NAFs)
-4.  DQN/Double-DQN
-5.  Vanilla Policy Gradients (VPG)
-6.  Deep Q-learning from Demonstration (DQFD) -
+-  Normalised Advantage functions (NAFs)
+-  DQN/Double-DQN, N-step DQN
+-  Vanilla Policy Gradients (VPG)
+-  Deep Q-learning from Demonstration (DQFD) -
     [paper](https://arxiv.org/abs/1704.03732)
-7.  Proximal Policy Optimisation (PPO)  - [paper](https://arxiv.org/abs/1707.06347)
+-  Proximal Policy Optimisation (PPO) - [paper](https://arxiv.org/abs/1707.06347)
+-  Categorical DQN - [paper](https://arxiv.org/abs/1707.06887) 
 
 Installation
 ------------
 
-For the most straight-forward install via pip, execute:
+We uploaded the latest stable version of TensorForce to PyPI. To install, just execute:
+
+```bash
+pip install tensorforce
+```
+
+If you want to use the latest version from GitHub, use:
+
 
 ```bash
 git clone git@github.com:reinforceio/tensorforce.git
@@ -75,16 +83,26 @@ Alternatively, you can use the following commands to install the tensorflow depe
 To install TensorForce with `tensorflow` (cpu), use:
 
 ```bash
-pip install tensorforce[tf] -e .
+# PyPI install
+pip install tensorforce[tf]
+
+# Local install
+pip install -e .[tf]
 ```
 
 To install TensorForce with `tensorflow-gpu` (gpu), use:
 
 ```bash
-pip install tensorforce[tf_gpu] -e .
+# PyPI install
+pip install tensorforce[tf_gpu]
+
+# Local install
+pip install -e .[tf_gpu]
 ```
 
-To update TensorForce, just run `git pull` in the tensorforce directory.
+To update TensorForce, use `pip install --upgrade tensorforce` for the PyPI
+version, or run `git pull` in the tensorforce directory if you cloned the 
+GitHub repository.
 Please note that we did not include OpenAI Gym/Universe/DeepMind lab in
 the default install script because not everyone will want to use these.
 Please install them as required, usually via pip.
@@ -97,7 +115,7 @@ provided configurations, e.g. to run the TRPO agent on CartPole, execute
 from the examples folder:
 
 ```bash
-python examples/openai_gym.py CartPole-v0 -a TRPOAgent -c examples/configs/trpo_cartpole.json -n examples/configs/trpo_cartpole_network.json
+python examples/openai_gym.py CartPole-v0 -a PPOAgent -c examples/configs/ppo_cartpole.json -n examples/configs/ppo_cartpole_network.json
 ```
 
 Documentation is available at
@@ -172,7 +190,20 @@ reward = client.execute(action)
 agent.observe(reward=reward, terminal=False)
 ```
 
+Benchmarks
+----------
 
+We provide a seperate repository for benchmarking our algorithm implementations at
+[reinforceio/tensorforce-benchmark](https://github.com/reinforceio/tensorforce-benchmark).
+
+Docker containers for benchmarking (CPU and GPU) are available.
+
+This is a sample output for `CartPole-v0`, comparing VPG, TRPO and PPO:
+
+![example output](https://user-images.githubusercontent.com/14904111/29328011-52778284-81f1-11e7-8f70-6554ca9388ed.png)
+
+Please refer to the [tensorforce-benchmark](https://github.com/reinforceio/tensorforce-benchmark) repository
+for more information.
 
 
 Support and contact
@@ -202,3 +233,6 @@ If you use TensorForce in your academic research, we would be grateful if you co
     year = {2017}
 }
 ```
+
+We are also very grateful for our open source contributors (listed according to github): Islandman93, mryellow, beflix,
+trickmeyer, AdamStelmaszczyk, 10nagachika, petrbel, Kismuz.

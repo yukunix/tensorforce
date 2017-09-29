@@ -25,6 +25,7 @@ from tensorforce.agents import DQNAgent
 from tensorforce.core.networks import layered_network_builder
 from tensorforce.environments.minimal_test import MinimalTest
 from tensorforce.execution import Runner
+from tensorforce.tests import reward_threshold
 
 
 class TestMemoryDQN(unittest.TestCase):
@@ -35,7 +36,10 @@ class TestMemoryDQN(unittest.TestCase):
             batch_size=8,
             learning_rate=0.001,
             memory_capacity=50,
-            memory='replay',
+            memory=dict(
+                type='replay',
+                random_sampling=True
+            ),
             first_update=20,
             target_update_frequency=10,
             states=environment.states,
@@ -49,7 +53,7 @@ class TestMemoryDQN(unittest.TestCase):
         runner = Runner(agent=agent, environment=environment)
 
         def episode_finished(r):
-            return r.episode < 100 or not all(x >= 1.0 for x in r.episode_rewards[-100:])
+            return r.episode < 100 or not all(x / l >= reward_threshold for x, l in zip(r.episode_rewards[-100:], r.episode_lengths[-100:]))
 
         runner.run(episodes=1000, episode_finished=episode_finished)
         print('Replay memory DQN: ' + str(runner.episode))
@@ -74,7 +78,8 @@ class TestMemoryDQN(unittest.TestCase):
         runner = Runner(agent=agent, environment=environment)
 
         def episode_finished(r):
-            return r.episode < 100 or not all(x >= 1.0 for x in r.episode_rewards[-100:])
+            return r.episode < 100 or not all(x / l >= reward_threshold for x, l in zip(r.episode_rewards[-100:],
+                                                                                        r.episode_lengths[-100:]))
 
         runner.run(episodes=1000, episode_finished=episode_finished)
         print('Prioritized replay memory DQN: ' + str(runner.episode))

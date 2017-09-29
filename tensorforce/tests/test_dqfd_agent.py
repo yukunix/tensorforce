@@ -26,6 +26,7 @@ from tensorforce.agents import DQFDAgent
 from tensorforce.core.networks import layered_network_builder, layers
 from tensorforce.environments.minimal_test import MinimalTest
 from tensorforce.execution import Runner
+from tensorforce.tests import reward_threshold
 
 
 class TestDQFDAgent(unittest.TestCase):
@@ -43,6 +44,10 @@ class TestDQFDAgent(unittest.TestCase):
                 target_update_frequency=20,
                 demo_memory_capacity=100,
                 demo_sampling_ratio=0.2,
+                memory=dict(
+                    type='replay',
+                    random_sampling=True
+                ),
                 states=environment.states,
                 actions=environment.actions,
                 network=layered_network_builder([
@@ -71,7 +76,7 @@ class TestDQFDAgent(unittest.TestCase):
             runner = Runner(agent=agent, environment=environment)
 
             def episode_finished(r):
-                return r.episode < 100 or not all(x >= 1.0 for x in r.episode_rewards[-100:])
+                return r.episode < 100 or not all(x / l >= reward_threshold for x, l in zip(r.episode_rewards[-100:], r.episode_lengths[-100:]))
 
             runner.run(episodes=1000, episode_finished=episode_finished)
             print('DQFD agent: ' + str(runner.episode))
@@ -84,10 +89,10 @@ class TestDQFDAgent(unittest.TestCase):
     def test_multi(self):
         passed = 0
 
-        def network_builder(inputs):
+        def network_builder(inputs, **kwargs):
             layer = layers['dense']
-            state0 = layer(x=layer(x=inputs['state0'], size=32), size=32)
-            state1 = layer(x=layer(x=inputs['state1'], size=32), size=32)
+            state0 = layer(x=layer(x=inputs['state0'], size=32, scope='state0-1'), size=32, scope='state0-2')
+            state1 = layer(x=layer(x=inputs['state1'], size=32, scope='state1-1'), size=32, scope='state1-2')
             return state0 * state1
 
         for _ in xrange(5):
@@ -100,6 +105,10 @@ class TestDQFDAgent(unittest.TestCase):
                 target_update_frequency=20,
                 demo_memory_capacity=100,
                 demo_sampling_ratio=0.2,
+                memory=dict(
+                    type='replay',
+                    random_sampling=True
+                ),
                 states=environment.states,
                 actions=environment.actions,
                 network=network_builder
@@ -125,7 +134,7 @@ class TestDQFDAgent(unittest.TestCase):
             runner = Runner(agent=agent, environment=environment)
 
             def episode_finished(r):
-                return r.episode < 50 or not all(x >= 1.0 for x in r.episode_rewards[-50:])
+                return r.episode < 50 or not all(x / l >= reward_threshold for x, l in zip(r.episode_rewards[-50:], r.episode_lengths[-50:]))
 
             runner.run(episodes=1000, episode_finished=episode_finished)
             print('DQFD agent (multi-state/action): ' + str(runner.episode))

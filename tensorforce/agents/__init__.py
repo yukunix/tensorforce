@@ -23,6 +23,8 @@ from tensorforce.agents.dqn_agent import DQNAgent
 from tensorforce.agents.naf_agent import NAFAgent
 from tensorforce.agents.dqfd_agent import DQFDAgent
 from tensorforce.agents.ppo_agent import PPOAgent
+from tensorforce.agents.categorical_dqn_agent import CategoricalDQNAgent
+from tensorforce.agents.dqn_nstep_agent import DQNNstepAgent
 
 
 agents = dict(
@@ -32,9 +34,12 @@ agents = dict(
     DQNAgent=DQNAgent,
     NAFAgent=NAFAgent,
     DQFDAgent=DQFDAgent,
-    PPOAgent=PPOAgent
+    PPOAgent=PPOAgent,
+    CategoricalDQNAgent=CategoricalDQNAgent,
+    DQNNstepAgent=DQNNstepAgent,
 )
 
 
 __all__ = ['Agent', 'BatchAgent', 'MemoryAgent', 'RandomAgent', 'VPGAgent',
-           'TRPOAgent', 'DQNAgent', 'NAFAgent', 'DQFDAgent', 'agents']
+           'TRPOAgent', 'DQNAgent', 'NAFAgent', 'DQFDAgent', 'CategoricalDQNAgent',
+           'DQNNstepAgent', 'agents']

@@ -20,7 +20,7 @@ Quick start example.
 import numpy as np
 
 from tensorforce import Configuration
-from tensorforce.agents import TRPOAgent
+from tensorforce.agents import TRPOAgent, PPOAgent
 from tensorforce.core.networks import layered_network_builder
 from tensorforce.execution import Runner
 from tensorforce.contrib.openai_gym import OpenAIGym
@@ -29,23 +29,31 @@ from tensorforce.contrib.openai_gym import OpenAIGym
 env = OpenAIGym('CartPole-v0')
 
 # Create a Trust Region Policy Optimization agent
-agent = TRPOAgent(config=Configuration(
-    loglevel='info',
-    batch_size=100,
-    baseline=dict(
-        type='mlp',
-        size=32,
-        hidden_layers=2,
-        repeat_update=100
-    ),
-    generalized_advantage_estimation=True,
+agent = PPOAgent(
+    Configuration(
+    log_level='info',
+    batch_size=4000,
+
+    # max_kl_divergence=0.1,
+    # cg_iterations=20,
+    # cg_damping=0.001,
+    # ls_max_backtracks=10,
+    # ls_accept_ratio=0.9,
+    # ls_override=False,
+
+    learning_rate=0.001,
+    entropy_penalty=0.01,
+    epochs=5,
+    optimizer_batch_size=512,
+    loss_clipping=0.2,
     normalize_advantage=False,
-    gae_lambda=0.97,
-    override_line_search=False,
-    cg_iterations=20,
-    cg_damping=0.01,
-    line_search_steps=20,
-    max_kl_divergence=0.005,
+    baseline=dict(
+        type="mlp",
+        sizes=[32, 32],
+        epochs=1,
+        update_batch_size=512,
+        learning_rate=0.01
+    ),
     states=env.states,
     actions=env.actions,
     network=layered_network_builder([

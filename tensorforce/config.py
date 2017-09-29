@@ -29,9 +29,13 @@ class Configuration(object):
     """
 
     def __init__(self, allow_defaults=True, **kwargs):
-        self._config = dict(**kwargs)
-        self._accessed = {key: False for key, value in self if not isinstance(value, Configuration)}
+        self._config = kwargs
+        self._accessed = {key: False for key, value in kwargs.items() if not isinstance(value, Configuration)}
         self.allow_defaults = allow_defaults
+
+    def to_json(self, filename):
+        with open(filename, 'w') as fp:
+            fp.write(json.dumps(self.as_dict()))
 
     @staticmethod
     def from_json(filename, absolute_path=False, allow_defaults=True):
@@ -42,7 +46,7 @@ class Configuration(object):
 
         with open(path, 'r') as fp:
             json_string = fp.read()
-        return Configuration.from_json_string(json_string=json_string, allow_defaults=True)
+        return Configuration.from_json_string(json_string=json_string, allow_defaults=allow_defaults)
 
     @staticmethod
     def from_json_string(json_string, allow_defaults=True):
@@ -58,7 +62,10 @@ class Configuration(object):
         return '{' + ', '.join('{}={}'.format(key, value) for key, value in self._config.items()) + '}'
 
     def __iter__(self):
-        return iter(self._config.items())
+        for key, value in self._config.items():
+            if key in self._accessed:
+                self._accessed[key] = True
+            yield key, value
 
     def __len__(self):
         return len(self._config)
@@ -72,32 +79,44 @@ class Configuration(object):
     def __getattr__(self, key):
         if key not in self._config:
             raise TensorForceError('Value for `{}` is not defined.'.format(key))
-        value = self._config[key]
-        if not isinstance(value, Configuration):
+        if key in self._accessed:
             self._accessed[key] = True
-        return value
+        return self._config[key]
 
     def __getitem__(self, key):
         return self.__getattr__(key)
 
     def __setattr__(self, key, value):
-        if key == 'allow_defaults':
-            super(Configuration, self).__setattr__(key, value)
-        elif key == '_config':
+        if key == '_config':
             value = {k: make_config_value(v) for k, v in value.items()}
             super(Configuration, self).__setattr__(key, value)
-        elif key == '_accessed':
+        elif key == '_accessed' or key == 'allow_defaults':
             super(Configuration, self).__setattr__(key, value)
         elif key not in self._config:
             raise TensorForceError('Value {} is not defined.'.format(key))
         else:
             self._config[key] = make_config_value(value)
 
+    def __getstate__(self):
+        return self._config
+
+    def __setstate__(self, d):
+        self._config = d
+
     def keys(self):
         return self._config.keys()
 
     def copy(self):
         return Configuration(**self._config)
+
+    def as_dict(self):
+        d = dict()
+        for key, value in self._config.items():
+            if isinstance(value, Configuration):
+                d[key] = value.as_dict()
+            else:
+                d[key] = value
+        return d
 
     def default(self, default):
         for key, value in default.items():
@@ -112,7 +131,7 @@ class Configuration(object):
 
     def not_accessed(self):
         not_accessed = list()
-        for key, value in self:
+        for key, value in self._config.items():
             if isinstance(value, Configuration):
                 for subkey in value.not_accessed():
                     not_accessed.append('{}.{}'.format(key, subkey))

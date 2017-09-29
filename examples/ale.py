@@ -25,6 +25,7 @@ import argparse
 import logging
 import os
 import sys
+import time
 
 from tensorforce import Configuration
 from tensorforce.agents import agents
@@ -41,7 +42,6 @@ def main():
     parser.add_argument('-c', '--agent-config', help="Agent configuration file")
     parser.add_argument('-n', '--network-config', help="Network configuration file")
     parser.add_argument('-fs', '--frame-skip', help="Number of frames to repeat action", type=int, default=1)
-    parser.add_argument('-rc', '--reward-clipping', help="Reward clipping. EX: -1 1", nargs="+", type=float)
     parser.add_argument('-rap', '--repeat-action-probability', help="Repeat action probability", type=float, default=0.0)
     parser.add_argument('-lolt', '--loss-of-life-termination', help="Loss of life counts as terminal state", action='store_true')
     parser.add_argument('-lolr', '--loss-of-life-reward', help="Loss of life reward/penalty. EX: -1 to penalize", type=float, default=0.0)
@@ -59,7 +59,7 @@ def main():
     logger.setLevel(logging.DEBUG)  # configurable!!!
     logger.addHandler(logging.StreamHandler(sys.stdout))
 
-    environment = ALE(args.rom, frame_skip=args.frame_skip, reward_clipping=args.reward_clipping,
+    environment = ALE(args.rom, frame_skip=args.frame_skip,
                       repeat_action_probability=args.repeat_action_probability,
                       loss_of_life_termination=args.loss_of_life_termination,
                       loss_of_life_reward=args.loss_of_life_reward,
@@ -111,7 +111,8 @@ def main():
 
     def episode_finished(r):
         if r.episode % report_episodes == 0:
-            logger.info("Finished episode {ep} after {ts} timesteps".format(ep=r.episode, ts=r.timestep))
+            sps = r.total_timesteps / (time.time() - r.start_time)
+            logger.info("Finished episode {ep} after {ts} timesteps. Steps Per Second {sps}".format(ep=r.episode, ts=r.timestep, sps=sps))
             logger.info("Episode reward: {}".format(r.episode_rewards[-1]))
             logger.info("Average of last 500 rewards: {}".format(sum(r.episode_rewards[-500:]) / 500))
             logger.info("Average of last 100 rewards: {}".format(sum(r.episode_rewards[-100:]) / 100))

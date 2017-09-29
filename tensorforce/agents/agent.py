@@ -92,6 +92,7 @@ class Agent(object):
     default_config = dict(
         preprocessing=None,
         exploration=None,
+        reward_preprocessing=None,
         log_level='info'
     )
 
@@ -112,7 +113,7 @@ class Agent(object):
 
         # states config and preprocessing
         self.preprocessing = dict()
-        if 'type' in config.states:
+        if 'shape' in config.states:
             # only one state
             config.states = dict(state=config.states)
             self.unique_state = True
@@ -149,17 +150,22 @@ class Agent(object):
             if config.exploration is not None and name in config.exploration:
                 self.exploration[name] = Exploration.from_config(config=config.exploration[name])
 
+        # reward preprocessing config
+        self.reward_preprocessing = None
+        if config.reward_preprocessing is not None:
+            self.reward_preprocessing = Preprocessing.from_config(config=config.reward_preprocessing)
+
         self.states_config = config.states
         self.actions_config = config.actions
 
-        if model:
+        if model is None:
+            self.model = self.__class__.model(config)
+        else:
             if not isinstance(model, self.__class__.model):
                 raise TensorForceError("Supplied model class `{}` does not match expected agent model class `{}`".format(
                     type(model).__name__, self.__class__.model.__name__
                 ))
             self.model = model
-        else:
-            self.model = self.__class__.model(config)
 
         not_accessed = config.not_accessed()
         if not_accessed:
@@ -207,14 +213,14 @@ class Agent(object):
         else:
             self.current_state = state
 
-        # preprocessing
+        # Preprocessing
         for name, preprocessing in self.preprocessing.items():
             self.current_state[name] = preprocessing.process(state=self.current_state[name])
 
-        # model action
+        # Podel action
         self.current_action, self.next_internal = self.model.get_action(state=self.current_state, internal=self.current_internal, deterministic=deterministic)
 
-        # exploration
+        # Exploration
         if not deterministic:
             for name, exploration in self.exploration.items():
                 if self.actions_config[name].continuous:
@@ -234,17 +240,26 @@ class Agent(object):
             return self.current_action
 
     def observe(self, reward, terminal):
-        """Observe experience from the environment to learn from.
+        """
+        Observe experience from the environment to learn from. Optionally preprocesses rewards
+        Child classes should call super to get the processed reward
+        EX: reward, terminal = super()...
 
         Args:
             reward: scalar reward that resulted from executing the action.
             terminal: boolean indicating if the episode terminated after the observation.
 
         Returns:
-            void
-
+            processed_reward
+            terminal
         """
-        raise NotImplementedError
+        if self.reward_preprocessing is not None:
+            reward = self.reward_preprocessing.process(reward)
+        return reward, terminal
+
+    def observe_episode_reward(self, episode_reward):
+        if self.model:
+            self.model.write_episode_reward_summary(episode_reward)
 
     def last_observation(self):
         return dict(

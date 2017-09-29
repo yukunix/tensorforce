@@ -23,7 +23,7 @@ import numpy as np
 from six.moves import xrange
 
 from tensorforce import Configuration
-from tensorforce.agents import TRPOAgent
+from tensorforce.agents import PPOAgent
 from tensorforce.core.networks import layered_network_builder
 from tensorforce.execution import Runner
 from tensorforce.contrib.openai_gym import OpenAIGym
@@ -39,22 +39,16 @@ class TestQuickstartExample(unittest.TestCase):
             env = OpenAIGym('CartPole-v0')
 
             # Create a Trust Region Policy Optimization agent
-            agent = TRPOAgent(config=Configuration(
-                loglevel='info',
-                batch_size=100,
-                baseline=dict(
-                    type='mlp',
-                    size=32,
-                    repeat_update=100
-                ),
-                override_line_search=False,
-                generalized_advantage_estimation=True,
-                normalize_advantage=False,
+            agent = PPOAgent(config=Configuration(
+                log_level='info',
+                batch_size=4096,
+
                 gae_lambda=0.97,
-                cg_iterations=20,
-                cg_damping=0.01,
-                line_search_steps=20,
-                max_kl_divergence=0.005,
+                learning_rate=0.001,
+                entropy_penalty=0.01,
+                epochs=5,
+                optimizer_batch_size=512,
+                loss_clipping=0.2,
                 states=env.states,
                 actions=env.actions,
                 network=layered_network_builder([

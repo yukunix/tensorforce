@@ -19,6 +19,8 @@ from tensorforce.core.preprocessing.normalize import Normalize
 from tensorforce.core.preprocessing.center import Center
 from tensorforce.core.preprocessing.grayscale import Grayscale
 from tensorforce.core.preprocessing.image_resize import ImageResize
+from tensorforce.core.preprocessing.divide import Divide
+from tensorforce.core.preprocessing.clip import Clip
 from tensorforce.core.preprocessing.preprocessing import Preprocessing
 
 
@@ -27,8 +29,11 @@ preprocessors = dict(
     normalize=Normalize,
     center=Center,
     grayscale=Grayscale,
-    image_resize=ImageResize
+    image_resize=ImageResize,
+    divide=Divide,
+    clip=Clip,
 )
 
 
-__all__ = ['Preprocessor', 'Sequence', 'Normalize', 'Center', 'Grayscale', 'ImageResize', 'Preprocessing', 'preprocessors']
+__all__ = ['Preprocessor', 'Sequence', 'Normalize', 'Center', 'Grayscale', 'ImageResize', 'Preprocessing', 'Divide',
+           'Clip', 'preprocessors']

@@ -19,7 +19,7 @@ from __future__ import division
 
 import os
 
-from setuptools import setup
+from setuptools import setup, find_packages
 
 install_requires=[
     'numpy',
@@ -50,13 +50,14 @@ if on_rtd:
 
 
 setup(name='tensorforce',
-      version='0.2',
+      version='0.2.0',
       description='Reinforcement learning for TensorFlow',
       url='http://github.com/reinforceio/tensorforce',
+      download_url='https://github.com/reinforceio/tensorforce/archive/0.2.0.tar.gz',
       author='reinforce.io',
       author_email='contact@reinforce.io',
       license='Apache 2.0',
-      packages=['tensorforce'],
+      packages=[package for package in find_packages() if package.startswith('tensorforce')],
       install_requires=install_requires,
       setup_requires=setup_requires,
       extras_require=extras_require,
